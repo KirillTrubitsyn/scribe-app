@@ -40,7 +40,7 @@ export type OrganizationMember = {
 export type Recording = {
   id: string
   organization_id: string
-  user_id: string
+  user_id: string | null
   title: string
   gcs_uri: string
   file_name: string
