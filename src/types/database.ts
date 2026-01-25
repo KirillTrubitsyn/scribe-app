@@ -172,38 +172,47 @@ export type Database = {
         Row: Organization
         Insert: OrganizationInsert
         Update: OrganizationUpdate
+        Relationships: []
       }
       organization_members: {
         Row: OrganizationMember
         Insert: OrganizationMemberInsert
         Update: OrganizationMemberUpdate
+        Relationships: []
       }
       recordings: {
         Row: Recording
         Insert: RecordingInsert
         Update: RecordingUpdate
+        Relationships: []
       }
       transcripts: {
         Row: Transcript
         Insert: TranscriptInsert
         Update: TranscriptUpdate
+        Relationships: []
       }
       artifacts: {
         Row: Artifact
         Insert: ArtifactInsert
         Update: ArtifactUpdate
+        Relationships: []
       }
       speakers: {
         Row: Speaker
         Insert: SpeakerInsert
         Update: SpeakerUpdate
+        Relationships: []
       }
       processing_jobs: {
         Row: ProcessingJob
         Insert: ProcessingJobInsert
         Update: ProcessingJobUpdate
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
     Enums: {
       organization_role: OrganizationRole
       recording_status: RecordingStatus
@@ -211,6 +220,7 @@ export type Database = {
       job_type: JobType
       job_status: JobStatus
     }
+    CompositeTypes: Record<string, never>
   }
 }
 

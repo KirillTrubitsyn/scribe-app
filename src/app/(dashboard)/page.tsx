@@ -19,7 +19,7 @@ async function getRecentRecordings(): Promise<Recording[]> {
       return [];
     }
 
-    return data || [];
+    return (data as Recording[]) || [];
   } catch (error) {
     console.error("Error connecting to database:", error);
     return [];
