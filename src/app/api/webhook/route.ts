@@ -233,9 +233,14 @@ export async function POST(request: Request) {
       new_status: newStatus,
     });
   } catch (error) {
-    console.error(`[Webhook] Error processing ${event}:`, error);
+    const errorMessage =
+      error instanceof Error ? error.message : JSON.stringify(error);
+    console.error(
+      `[Webhook] Error processing ${event} for recording ${recording_id}:`,
+      errorMessage
+    );
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", details: errorMessage },
       { status: 500 }
     );
   }
@@ -250,6 +255,21 @@ async function handleProcessingStarted(
   recordingId: string,
   jobId: string
 ) {
+  // Clean up any existing processing jobs for this recording (handles retries)
+  // This ensures a fresh start when re-processing a failed recording
+  const { error: deleteError } = await supabase
+    .from("processing_jobs")
+    .delete()
+    .eq("recording_id", recordingId);
+
+  if (deleteError) {
+    console.error(
+      `[Webhook] Warning: Failed to clean up existing jobs for ${recordingId}:`,
+      deleteError
+    );
+    // Continue anyway - the insert might still succeed
+  }
+
   // Create processing job record
   const { error } = await supabase.from("processing_jobs").insert({
     id: jobId,
@@ -263,9 +283,18 @@ async function handleProcessingStarted(
   });
 
   if (error) {
-    console.error("Failed to create processing job:", error);
-    throw error;
+    console.error(
+      `[Webhook] Failed to create processing job for ${recordingId}:`,
+      JSON.stringify(error)
+    );
+    throw new Error(
+      `Failed to create processing job: ${error.message || error.code || "Unknown error"}`
+    );
   }
+
+  console.log(
+    `[Webhook] Created transcription job ${jobId} for recording ${recordingId}`
+  );
 }
 
 async function handleTranscriptionCompleted(
@@ -335,15 +364,27 @@ async function handleTranscriptionCompleted(
   }
 
   // Create analysis job
-  await supabase.from("processing_jobs").insert({
-    recording_id: recordingId,
-    job_type: "analysis",
-    status: "running",
-    started_at: new Date().toISOString(),
-    completed_at: null,
-    error_message: null,
-    google_operation_name: null,
-  });
+  const { error: analysisJobError } = await supabase
+    .from("processing_jobs")
+    .insert({
+      recording_id: recordingId,
+      job_type: "analysis",
+      status: "running",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      error_message: null,
+      google_operation_name: null,
+    });
+
+  if (analysisJobError) {
+    console.error(
+      `[Webhook] Failed to create analysis job for ${recordingId}:`,
+      JSON.stringify(analysisJobError)
+    );
+    // Don't throw - transcription completed successfully, analysis job creation is secondary
+  } else {
+    console.log(`[Webhook] Created analysis job for recording ${recordingId}`);
+  }
 }
 
 async function handleAnalysisCompleted(
