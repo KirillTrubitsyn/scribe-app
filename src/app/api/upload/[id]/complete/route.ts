@@ -108,11 +108,19 @@ async function triggerProcessing(
     return false;
   }
 
+  // Ensure URL has protocol
+  if (!railwayWorkerUrl.startsWith("http://") && !railwayWorkerUrl.startsWith("https://")) {
+    railwayWorkerUrl = "https://" + railwayWorkerUrl;
+    console.log(`[Upload] Added https:// to worker URL`);
+  }
+
   // Ensure URL ends with /process
   if (!railwayWorkerUrl.endsWith("/process")) {
     railwayWorkerUrl = railwayWorkerUrl.replace(/\/$/, "") + "/process";
-    console.log(`[Upload] Appended /process to worker URL: ${railwayWorkerUrl}`);
+    console.log(`[Upload] Appended /process to worker URL`);
   }
+
+  console.log(`[Upload] Final worker URL: ${railwayWorkerUrl}`);
 
   try {
     // Update status to processing
