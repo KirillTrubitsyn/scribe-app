@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { createAdminClient } from "@/lib/supabase/server";
 import type { Recording } from "@/types/database";
+import type { Database } from "@/types/database";
 
 // ============================================
 // Types
@@ -17,6 +19,37 @@ interface RailwayWorkerPayload {
   callback_url: string;
   file_name: string;
   file_size: number;
+}
+
+// Helper to create Supabase client from request cookies
+function createClientFromRequest(request: Request) {
+  const cookieHeader = request.headers.get("cookie") || "";
+  const cookies: Record<string, string> = {};
+
+  cookieHeader.split(";").forEach((cookie) => {
+    const [name, ...rest] = cookie.trim().split("=");
+    if (name) {
+      cookies[name] = rest.join("=");
+    }
+  });
+
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return Object.entries(cookies).map(([name, value]) => ({
+            name,
+            value,
+          }));
+        },
+        setAll() {
+          // Not needed for read operations
+        },
+      },
+    }
+  );
 }
 
 // ============================================
@@ -42,8 +75,8 @@ export async function POST(request: Request) {
   const { recording_id } = body;
 
   // 2. Use user's Supabase client with RLS to verify access
-  // If user can fetch the recording, they have access (RLS enforces org membership)
-  const supabase = await createClient();
+  // Create client directly from request cookies to avoid Next.js headers() issues
+  const supabase = createClientFromRequest(request);
   const { data: accessCheck, error: accessError } = await supabase
     .from("recordings")
     .select("id")
