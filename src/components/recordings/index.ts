@@ -5,3 +5,7 @@ export { UploadModal } from "./upload-modal";
 export { RecordingItem } from "./recording-item";
 export { RecentList } from "./recent-list";
 export { DashboardClient } from "./dashboard-client";
+export { StatusBadge } from "./status-badge";
+export { RecordingsFilter, type FilterValue } from "./recordings-filter";
+export { RecordingsTable, type RecordingWithRelations } from "./recordings-table";
+export { RecordingsPageClient } from "./recordings-page-client";
