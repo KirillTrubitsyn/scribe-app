@@ -86,12 +86,12 @@ export async function POST(request: Request) {
   }
 
   // 6. Check Railway worker URL is configured
-  const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
+  let railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
   if (!railwayWorkerUrl) {
-    console.error("RAILWAY_WEBHOOK_URL not configured");
+    console.error("[Trigger] RAILWAY_WEBHOOK_URL not configured");
     return NextResponse.json(
       { error: "Processing service not configured" },
       { status: 503 }
@@ -99,11 +99,17 @@ export async function POST(request: Request) {
   }
 
   if (!railwaySecret) {
-    console.error("RAILWAY_WEBHOOK_SECRET not configured");
+    console.error("[Trigger] RAILWAY_WEBHOOK_SECRET not configured");
     return NextResponse.json(
       { error: "Processing service not configured" },
       { status: 503 }
     );
+  }
+
+  // Ensure URL ends with /process
+  if (!railwayWorkerUrl.endsWith("/process")) {
+    railwayWorkerUrl = railwayWorkerUrl.replace(/\/$/, "") + "/process";
+    console.log(`[Trigger] Appended /process to worker URL: ${railwayWorkerUrl}`);
   }
 
   // 7. Update recording status to processing
@@ -147,21 +153,32 @@ export async function POST(request: Request) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `Railway worker request failed: ${response.status} - ${errorText}`
+        `[Trigger] Railway worker request failed: ${response.status} - ${errorText}`
       );
+      console.error(`[Trigger] Worker URL used: ${railwayWorkerUrl}`);
+
+      // Determine user-friendly error message based on status
+      let userMessage = "Не удалось запустить обработку. Попробуйте снова.";
+      if (response.status === 401) {
+        console.error("[Trigger] Authentication failed - check RAILWAY_WEBHOOK_SECRET matches on Vercel and Railway");
+        userMessage = "Ошибка аутентификации сервиса обработки. Обратитесь к администратору.";
+      } else if (response.status === 404) {
+        console.error("[Trigger] Worker endpoint not found - check RAILWAY_WEBHOOK_URL includes /process");
+        userMessage = "Сервис обработки недоступен. Обратитесь к администратору.";
+      }
 
       // Revert recording status on failure
       await adminClient
         .from("recordings")
         .update({
           status: "error",
-          error_message: `Failed to start processing: ${response.status}`,
+          error_message: userMessage,
           updated_at: new Date().toISOString(),
         })
         .eq("id", recording_id);
 
       return NextResponse.json(
-        { error: "Failed to start processing" },
+        { error: "Failed to start processing", details: `Worker returned ${response.status}` },
         { status: 502 }
       );
     }
