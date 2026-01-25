@@ -88,7 +88,7 @@ async function triggerProcessing(
   supabase: ReturnType<typeof createAdminClient>,
   recording: Recording
 ): Promise<boolean> {
-  const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
+  let railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -106,6 +106,12 @@ async function triggerProcessing(
       })
       .eq("id", recording.id);
     return false;
+  }
+
+  // Ensure URL ends with /process
+  if (!railwayWorkerUrl.endsWith("/process")) {
+    railwayWorkerUrl = railwayWorkerUrl.replace(/\/$/, "") + "/process";
+    console.log(`[Upload] Appended /process to worker URL: ${railwayWorkerUrl}`);
   }
 
   try {
@@ -144,13 +150,24 @@ async function triggerProcessing(
       console.error(
         `[Upload] Railway worker request failed: ${response.status} - ${errorText}`
       );
+      console.error(`[Upload] Worker URL used: ${railwayWorkerUrl}`);
+
+      // Determine user-friendly error message based on status
+      let userMessage = "Не удалось запустить обработку. Попробуйте снова.";
+      if (response.status === 401) {
+        console.error("[Upload] Authentication failed - check RAILWAY_WEBHOOK_SECRET matches on Vercel and Railway");
+        userMessage = "Ошибка аутентификации сервиса обработки. Обратитесь к администратору.";
+      } else if (response.status === 404) {
+        console.error("[Upload] Worker endpoint not found - check RAILWAY_WEBHOOK_URL includes /process");
+        userMessage = "Сервис обработки недоступен. Обратитесь к администратору.";
+      }
 
       // Set error status so user can see and retry
       await supabase
         .from("recordings")
         .update({
           status: "error" as RecordingStatus,
-          error_message: "Не удалось запустить обработку. Попробуйте снова.",
+          error_message: userMessage,
           updated_at: new Date().toISOString(),
         })
         .eq("id", recording.id);
