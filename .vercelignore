@@ -1,0 +1,2 @@
+# Ignore Railway worker - it's a separate service
+worker/
