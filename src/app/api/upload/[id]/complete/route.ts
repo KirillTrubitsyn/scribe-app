@@ -88,7 +88,7 @@ async function triggerProcessing(
   supabase: ReturnType<typeof createAdminClient>,
   recording: Recording
 ): Promise<boolean> {
-  let railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
+  const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -108,23 +108,7 @@ async function triggerProcessing(
     return false;
   }
 
-  // Trim whitespace and normalize URL
-  railwayWorkerUrl = railwayWorkerUrl.trim();
-
-  // Ensure URL has protocol
-  if (!railwayWorkerUrl.startsWith("http://") && !railwayWorkerUrl.startsWith("https://")) {
-    railwayWorkerUrl = "https://" + railwayWorkerUrl;
-  }
-
-  // Remove any trailing slashes
-  railwayWorkerUrl = railwayWorkerUrl.replace(/\/+$/, "");
-
-  // Ensure URL ends with /process (but not /process/process)
-  if (!railwayWorkerUrl.endsWith("/process")) {
-    railwayWorkerUrl = railwayWorkerUrl + "/process";
-  }
-
-  console.log(`[Upload] Final worker URL: ${railwayWorkerUrl}`);
+  console.log(`[Upload] Using worker URL: ${railwayWorkerUrl}`);
 
   try {
     // Update status to processing
