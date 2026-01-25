@@ -12,11 +12,21 @@ export async function POST() {
     const bucket = storage.bucket(bucketName);
 
     // Configure CORS for browser uploads
+    // See: https://cloud.google.com/storage/docs/cross-origin
     await bucket.setCorsConfiguration([
       {
         origin: ["*"],
-        method: ["PUT", "GET", "HEAD", "OPTIONS"],
-        responseHeader: ["Content-Type", "Content-Length", "Content-Range"],
+        method: ["GET", "HEAD", "PUT", "POST", "DELETE", "OPTIONS"],
+        responseHeader: [
+          "Content-Type",
+          "Content-Length",
+          "Content-Range",
+          "Content-Disposition",
+          "Cache-Control",
+          "ETag",
+          "x-goog-*",
+          "x-goog-meta-*",
+        ],
         maxAgeSeconds: 3600,
       },
     ]);
