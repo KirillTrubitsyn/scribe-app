@@ -250,23 +250,20 @@ async function handleProcessingStarted(
   recordingId: string,
   jobId: string
 ) {
-  // Update or create processing job record
-  const { error } = await supabase.from("processing_jobs").upsert(
-    {
-      id: jobId,
-      recording_id: recordingId,
-      job_type: "transcription",
-      status: "running",
-      started_at: new Date().toISOString(),
-      completed_at: null,
-      error_message: null,
-      google_operation_name: null,
-    },
-    { onConflict: "id" }
-  );
+  // Create processing job record
+  const { error } = await supabase.from("processing_jobs").insert({
+    id: jobId,
+    recording_id: recordingId,
+    job_type: "transcription",
+    status: "running",
+    started_at: new Date().toISOString(),
+    completed_at: null,
+    error_message: null,
+    google_operation_name: null,
+  });
 
   if (error) {
-    console.error("Failed to update processing job:", error);
+    console.error("Failed to create processing job:", error);
     throw error;
   }
 }

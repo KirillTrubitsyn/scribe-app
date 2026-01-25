@@ -175,17 +175,6 @@ async function triggerProcessing(
       `[Upload] Successfully triggered processing for recording ${recording.id}`
     );
 
-    // Create initial processing job record
-    await supabase.from("processing_jobs").insert({
-      recording_id: recording.id,
-      job_type: "transcription",
-      status: "pending",
-      started_at: null,
-      completed_at: null,
-      error_message: null,
-      google_operation_name: null,
-    });
-
     return true;
   } catch (error) {
     console.error("[Upload] Failed to trigger processing:", error);

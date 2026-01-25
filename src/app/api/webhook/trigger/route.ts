@@ -186,17 +186,6 @@ export async function POST(request: Request) {
       workerResponse
     );
 
-    // 9. Create initial processing job record
-    await adminClient.from("processing_jobs").insert({
-      recording_id: recording_id,
-      job_type: "transcription",
-      status: "pending",
-      started_at: null,
-      completed_at: null,
-      error_message: null,
-      google_operation_name: null,
-    });
-
     return NextResponse.json({
       success: true,
       recording_id,
