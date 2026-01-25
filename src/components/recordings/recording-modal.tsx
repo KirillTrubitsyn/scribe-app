@@ -78,8 +78,11 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
     if (!audioBlob) return;
 
     // Create a File from the Blob
-    const fileName = `recording-${Date.now()}.webm`;
-    const file = new File([audioBlob], fileName, { type: audioBlob.type });
+    // Normalize content type - API expects base type without codecs
+    const contentType = audioBlob.type.split(";")[0] || "audio/webm";
+    const extension = contentType === "audio/mp4" ? "m4a" : "webm";
+    const fileName = `recording-${Date.now()}.${extension}`;
+    const file = new File([audioBlob], fileName, { type: contentType });
 
     const recordingTitle = title.trim() || `Запись ${new Date().toLocaleDateString("ru-RU")}`;
     const result = await upload(file, recordingTitle);
