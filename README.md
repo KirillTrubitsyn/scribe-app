@@ -1,36 +1,102 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SGC Scribe
 
-## Getting Started
+Система транскрибации и анализа аудио/видео записей для Сибирской Генерирующей Компании.
 
-First, run the development server:
+## Технологии
+
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **Backend**: Supabase (PostgreSQL, Auth, Storage)
+- **AI/ML**: Google Cloud Speech-to-Text, Vertex AI
+- **Storage**: Google Cloud Storage
+
+## Начало работы
+
+### Требования
+
+- Node.js 18+
+- npm или yarn
+- Аккаунт Supabase
+- Аккаунт Google Cloud (для Speech-to-Text)
+
+### Установка
 
 ```bash
+# Установка зависимостей
+npm install
+
+# Копирование переменных окружения
+cp .env.local.example .env.local
+
+# Запуск в режиме разработки
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Переменные окружения
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_STORAGE_BUCKET=your-bucket-name
+GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+```
 
-## Learn More
+## Режим разработки
 
-To learn more about Next.js, take a look at the following resources:
+Приложение работает без аутентификации. Используется тестовый пользователь и организация.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+**Тестовые данные:**
+- User ID: `00000000-0000-0000-0000-000000000001`
+- Organization: "Сибирская Генерирующая Компания" (slug: `sgc`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### TODO перед продакшеном
 
-## Deploy on Vercel
+1. Реализовать страницы `/login` и `/register`
+2. Настроить Supabase Auth
+3. Обновить middleware для проверки сессии
+4. Заменить mock-функции на реальные
+5. Обновить RLS политики для проверки `auth.uid()`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**Файлы для обновления:**
+- `src/lib/supabase/auth.ts`
+- `src/hooks/use-user.ts`
+- `src/middleware.ts`
+- `supabase/migrations/xxx_production_rls.sql`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Структура проекта
+
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── api/               # API Routes
+│   ├── recordings/        # Страницы записей
+│   └── page.tsx           # Главная страница
+├── components/            # React компоненты
+├── hooks/                 # React хуки
+├── lib/                   # Утилиты и клиенты
+│   ├── supabase/         # Supabase клиенты
+│   └── google/           # Google Cloud клиенты
+└── types/                 # TypeScript типы
+
+supabase/
+├── migrations/            # SQL миграции
+└── seed.sql              # Тестовые данные
+```
+
+## База данных
+
+Схема базы данных включает:
+
+- `organizations` — Организации (мультитенантность)
+- `organization_members` — Участники организаций
+- `recordings` — Загруженные записи
+- `transcripts` — Результаты транскрибации
+- `artifacts` — Сгенерированные артефакты (саммари, протоколы)
+- `speakers` — Идентификация спикеров
+- `processing_jobs` — Отслеживание фоновых задач
+
+## Лицензия
+
+Proprietary. All rights reserved.

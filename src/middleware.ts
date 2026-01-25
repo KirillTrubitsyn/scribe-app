@@ -1,50 +1,22 @@
-import { type NextRequest, NextResponse } from 'next/server'
-import { updateSession } from '@/lib/supabase/middleware'
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
-// Routes that require authentication
-const protectedRoutes = ['/recordings']
+export function middleware(request: NextRequest) {
+  // TODO: Добавить проверку авторизации через Supabase
+  // Сейчас пропускаем все запросы без проверки
 
-// Routes that should redirect to /recordings if user is already authenticated
-const authRoutes = ['/login', '/register']
-
-export async function middleware(request: NextRequest) {
-  const { user, supabaseResponse } = await updateSession(request)
-  const { pathname } = request.nextUrl
-
-  // Check if the current path is a protected route
-  const isProtectedRoute = protectedRoutes.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  )
-
-  // Check if the current path is an auth route
-  const isAuthRoute = authRoutes.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`)
-  )
-
-  // Redirect unauthenticated users from protected routes to login
-  if (isProtectedRoute && !user) {
-    const loginUrl = new URL('/login', request.url)
-    loginUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(loginUrl)
-  }
-
-  // Redirect authenticated users from auth routes to recordings
-  if (isAuthRoute && user) {
-    return NextResponse.redirect(new URL('/recordings', request.url))
-  }
-
-  return supabaseResponse
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * Match all request paths except:
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - public folder assets
+     * - public folder
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
