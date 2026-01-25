@@ -24,18 +24,7 @@ interface RailwayWorkerPayload {
 // ============================================
 
 export async function POST(request: Request) {
-  // 1. Authenticate user
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  // 2. Parse request body
+  // 1. Parse request body
   let body: TriggerRequestBody;
   try {
     body = await request.json();
@@ -52,7 +41,23 @@ export async function POST(request: Request) {
 
   const { recording_id } = body;
 
-  // 3. Get recording details with admin client to bypass RLS
+  // 2. Use user's Supabase client with RLS to verify access
+  // If user can fetch the recording, they have access (RLS enforces org membership)
+  const supabase = await createClient();
+  const { data: accessCheck, error: accessError } = await supabase
+    .from("recordings")
+    .select("id")
+    .eq("id", recording_id)
+    .single();
+
+  if (accessError || !accessCheck) {
+    return NextResponse.json(
+      { error: "Recording not found or access denied" },
+      { status: 404 }
+    );
+  }
+
+  // 3. Get full recording details with admin client for operations
   const adminClient = createAdminClient();
 
   const { data, error: recordingError } = await adminClient
@@ -69,21 +74,6 @@ export async function POST(request: Request) {
   }
 
   const recording = data as Recording;
-
-  // 4. Verify user has access to this recording's organization
-  const { data: membership } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", recording.organization_id)
-    .eq("user_id", user.id)
-    .single();
-
-  if (!membership) {
-    return NextResponse.json(
-      { error: "Access denied to this recording" },
-      { status: 403 }
-    );
-  }
 
   // 5. Validate recording status
   if (recording.status !== "uploaded" && recording.status !== "error") {
