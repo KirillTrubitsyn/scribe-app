@@ -86,7 +86,7 @@ export async function POST(request: Request) {
   }
 
   // 6. Check Railway worker URL is configured
-  let railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
+  const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
@@ -106,19 +106,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Ensure URL has protocol
-  if (!railwayWorkerUrl.startsWith("http://") && !railwayWorkerUrl.startsWith("https://")) {
-    railwayWorkerUrl = "https://" + railwayWorkerUrl;
-    console.log(`[Trigger] Added https:// to worker URL`);
-  }
-
-  // Ensure URL ends with /process
-  if (!railwayWorkerUrl.endsWith("/process")) {
-    railwayWorkerUrl = railwayWorkerUrl.replace(/\/$/, "") + "/process";
-    console.log(`[Trigger] Appended /process to worker URL`);
-  }
-
-  console.log(`[Trigger] Final worker URL: ${railwayWorkerUrl}`);
+  console.log(`[Trigger] Using worker URL: ${railwayWorkerUrl}`);
 
   // 7. Update recording status to processing
   const { error: updateError } = await adminClient
