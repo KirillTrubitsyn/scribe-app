@@ -1,18 +1,34 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Play, Pause, Download, Trash2, Loader2, Volume2 } from "lucide-react";
-import { cn, formatDate, formatDuration } from "@/lib/utils";
-import { StatusBadge } from "@/components/recordings/status-badge";
-import type { Recording } from "@/types/database";
+import { Loader2, FileText, Sparkles, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-type RecordingWithAudio = Recording & {
+import { DetailHeader } from "@/components/recordings/detail-header";
+import { AudioPlayer, AudioPlayerPlaceholder } from "@/components/recordings/audio-player";
+import { TranscriptView } from "@/components/recordings/transcript-view";
+import { SummaryView } from "@/components/recordings/summary-view";
+import { SpeakersView } from "@/components/recordings/speakers-view";
+import { DetailSidebar } from "@/components/recordings/detail-sidebar";
+import { ProcessingStatus } from "@/components/recordings/processing-status";
+
+import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
+
+type RecordingWithData = Recording & {
   audioUrl: string | null;
-  transcripts: unknown[];
-  artifacts: unknown[];
-  speakers: unknown[];
+  transcripts: Transcript[];
+  artifacts: Artifact[];
+  speakers: Speaker[];
 };
+
+type TabValue = "transcript" | "summary" | "speakers";
+
+const TABS: { value: TabValue; label: string; icon: React.ReactNode }[] = [
+  { value: "transcript", label: "Транскрипт", icon: <FileText className="w-4 h-4" /> },
+  { value: "summary", label: "Резюме", icon: <Sparkles className="w-4 h-4" /> },
+  { value: "speakers", label: "Участники", icon: <Users className="w-4 h-4" /> },
+];
 
 export default function RecordingDetailPage({
   params,
@@ -20,20 +36,23 @@ export default function RecordingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const router = useRouter();
-  const audioRef = useRef<HTMLAudioElement>(null);
+
   const [recordingId, setRecordingId] = useState<string | null>(null);
-  const [recording, setRecording] = useState<RecordingWithAudio | null>(null);
+  const [recording, setRecording] = useState<RecordingWithData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [activeTab, setActiveTab] = useState<TabValue>("transcript");
+  const [currentTime, setCurrentTime] = useState(0);
+  const [seekTo, setSeekTo] = useState<number | null>(null);
+
+  // Resolve params
   useEffect(() => {
     params.then(({ id }) => setRecordingId(id));
   }, [params]);
 
+  // Fetch recording data
   useEffect(() => {
     if (!recordingId) return;
 
@@ -55,38 +74,38 @@ export default function RecordingDetailPage({
     fetchRecording();
   }, [recordingId]);
 
-  const togglePlayPause = () => {
-    if (!audioRef.current) return;
-
-    if (isPlaying) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
+  // Poll for updates when processing
+  useEffect(() => {
+    if (!recording || recording.status === "ready" || recording.status === "error") {
+      return;
     }
-    setIsPlaying(!isPlaying);
-  };
 
-  const handleTimeUpdate = () => {
-    if (audioRef.current) {
-      setCurrentTime(audioRef.current.currentTime);
-    }
-  };
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/recordings/${recordingId}`);
+        if (response.ok) {
+          const data = await response.json();
+          setRecording(data);
+        }
+      } catch {
+        // Ignore polling errors
+      }
+    }, 5000);
 
-  const handleLoadedMetadata = () => {
-    if (audioRef.current) {
-      setDuration(audioRef.current.duration);
-    }
-  };
+    return () => clearInterval(interval);
+  }, [recording, recordingId]);
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setCurrentTime(time);
-    }
-  };
+  const handleSegmentClick = useCallback((startTime: number) => {
+    setSeekTo(startTime);
+    // Reset seekTo after a short delay to allow re-clicking same segment
+    setTimeout(() => setSeekTo(null), 100);
+  }, []);
 
-  const handleDownload = async () => {
+  const handleTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
+
+  const handleDownloadAudio = async () => {
     if (!recordingId) return;
 
     try {
@@ -101,9 +120,14 @@ export default function RecordingDetailPage({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err) {
+    } catch {
       alert("Не удалось скачать запись");
     }
+  };
+
+  const handleDownloadDocx = async () => {
+    // TODO: Implement DOCX export
+    alert("Экспорт в DOCX будет доступен в ближайшее время");
   };
 
   const handleDelete = async () => {
@@ -118,18 +142,23 @@ export default function RecordingDetailPage({
       if (!response.ok) throw new Error("Failed to delete");
 
       router.push("/recordings");
-    } catch (err) {
+    } catch {
       alert("Не удалось удалить запись");
       setIsDeleting(false);
     }
   };
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  const handleAIAnalysis = async () => {
+    // TODO: Implement AI analysis trigger
+    alert("AI-анализ будет запущен");
   };
 
+  const handleSpeakerUpdate = async (speakerId: string, name: string) => {
+    // TODO: Implement speaker name update via API
+    console.log("Update speaker:", speakerId, name);
+  };
+
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -138,140 +167,132 @@ export default function RecordingDetailPage({
     );
   }
 
+  // Error state
   if (error || !recording) {
     return (
-      <div className="p-8">
+      <div className="p-8 text-center">
+        <p className="text-red-400 mb-4">{error || "Запись не найдена"}</p>
         <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate-400 hover:text-white mb-8"
+          onClick={() => router.push("/recordings")}
+          className="text-slate-400 hover:text-white transition-colors"
         >
-          <ArrowLeft className="w-5 h-5" />
-          Назад
+          Вернуться к списку записей
         </button>
-        <div className="text-center py-16">
-          <p className="text-red-400">{error || "Запись не найдена"}</p>
+      </div>
+    );
+  }
+
+  // Processing state - show progress page
+  if (recording.status !== "ready" && recording.status !== "error") {
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <DetailHeader recording={recording} speakers={recording.speakers} />
+        <div className="mt-8">
+          <ProcessingStatus status={recording.status} />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="p-8 max-w-4xl mx-auto">
-      {/* Header */}
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-2 text-slate-400 hover:text-white mb-8"
-      >
-        <ArrowLeft className="w-5 h-5" />
-        Назад к записям
-      </button>
-
-      {/* Recording Info */}
-      <div className="mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-2">{recording.title}</h1>
-            <div className="flex items-center gap-4 text-sm text-slate-400">
-              <span>{formatDate(recording.created_at)}</span>
-              {recording.duration_seconds && (
-                <span>{formatDuration(recording.duration_seconds)}</span>
-              )}
-              <StatusBadge status={recording.status} />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDownload}
-              className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
-              title="Скачать"
-            >
-              <Download className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="p-2 rounded-lg bg-slate-800 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors disabled:opacity-50"
-              title="Удалить"
-            >
-              {isDeleting ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <Trash2 className="w-5 h-5" />
-              )}
-            </button>
-          </div>
+  // Error state from processing
+  if (recording.status === "error") {
+    return (
+      <div className="p-8 max-w-4xl mx-auto">
+        <DetailHeader recording={recording} speakers={recording.speakers} />
+        <div className="mt-8">
+          <ProcessingStatus
+            status={recording.status}
+            errorMessage={recording.error_message}
+          />
         </div>
       </div>
+    );
+  }
 
-      {/* Audio Player */}
-      {recording.audioUrl ? (
-        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50">
-          <audio
-            ref={audioRef}
-            src={recording.audioUrl}
-            onTimeUpdate={handleTimeUpdate}
-            onLoadedMetadata={handleLoadedMetadata}
-            onEnded={() => setIsPlaying(false)}
-          />
+  const transcript = recording.transcripts[0] || null;
 
-          <div className="flex items-center gap-4">
-            <button
-              onClick={togglePlayPause}
-              className={cn(
-                "w-14 h-14 rounded-full flex items-center justify-center transition-colors",
-                "bg-orange-500 hover:bg-orange-400 text-white"
-              )}
-            >
-              {isPlaying ? (
-                <Pause className="w-6 h-6" />
-              ) : (
-                <Play className="w-6 h-6 ml-1" />
-              )}
-            </button>
+  return (
+    <div className="p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <DetailHeader recording={recording} speakers={recording.speakers} />
 
-            <div className="flex-1">
-              <input
-                type="range"
-                min="0"
-                max={duration || 0}
-                value={currentTime}
-                onChange={handleSeek}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+        {/* Main content with sidebar */}
+        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+          {/* Left column - Player, Tabs, Content */}
+          <div className="space-y-6 min-w-0">
+            {/* Audio Player */}
+            {recording.audioUrl ? (
+              <AudioPlayer
+                audioUrl={recording.audioUrl}
+                onTimeUpdate={handleTimeUpdate}
+                seekTo={seekTo}
               />
-              <div className="flex justify-between text-sm text-slate-400 mt-2">
-                <span>{formatTime(currentTime)}</span>
-                <span>{formatTime(duration)}</span>
+            ) : (
+              <AudioPlayerPlaceholder message="Аудиофайл недоступен" />
+            )}
+
+            {/* Tabs */}
+            <div className="border-b border-slate-700/50">
+              <div className="flex gap-1">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setActiveTab(tab.value)}
+                    className={cn(
+                      "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px",
+                      activeTab === tab.value
+                        ? "text-orange-500 border-orange-500"
+                        : "text-slate-400 border-transparent hover:text-white hover:border-slate-600"
+                    )}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            <Volume2 className="w-5 h-5 text-slate-400" />
-          </div>
-        </div>
-      ) : (
-        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 text-center">
-          <p className="text-slate-400">
-            {recording.status === "uploading"
-              ? "Файл загружается..."
-              : "Аудиофайл недоступен"}
-          </p>
-        </div>
-      )}
+            {/* Tab Content */}
+            <div className="min-h-[400px]">
+              {activeTab === "transcript" && (
+                <TranscriptView
+                  transcript={transcript}
+                  speakers={recording.speakers}
+                  currentTime={currentTime}
+                  onSegmentClick={handleSegmentClick}
+                />
+              )}
 
-      {/* File Info */}
-      <div className="mt-8 bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
-        <h2 className="text-lg font-medium text-white mb-4">Информация о файле</h2>
-        <dl className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <dt className="text-slate-400">Название файла</dt>
-            <dd className="text-white mt-1">{recording.file_name}</dd>
+              {activeTab === "summary" && (
+                <SummaryView artifacts={recording.artifacts} />
+              )}
+
+              {activeTab === "speakers" && (
+                <SpeakersView
+                  speakers={recording.speakers}
+                  transcript={transcript}
+                  recordingId={recording.id}
+                  onSpeakerUpdate={handleSpeakerUpdate}
+                />
+              )}
+            </div>
           </div>
-          <div>
-            <dt className="text-slate-400">Размер</dt>
-            <dd className="text-white mt-1">
-              {(recording.file_size / 1024 / 1024).toFixed(2)} МБ
-            </dd>
-          </div>
-        </dl>
+
+          {/* Right column - Sidebar */}
+          <aside className="lg:sticky lg:top-8 lg:self-start">
+            <DetailSidebar
+              recording={recording}
+              transcript={transcript}
+              artifacts={recording.artifacts}
+              onDownloadAudio={handleDownloadAudio}
+              onDownloadDocx={handleDownloadDocx}
+              onDelete={handleDelete}
+              onAIAnalysis={handleAIAnalysis}
+              isDeleting={isDeleting}
+            />
+          </aside>
+        </div>
       </div>
     </div>
   );
