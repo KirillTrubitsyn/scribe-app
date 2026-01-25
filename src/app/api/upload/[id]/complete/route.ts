@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import type { RecordingStatus } from "@/types/database";
+import type { RecordingStatus, Recording } from "@/types/database";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-interface RecordingData {
-  id: string;
-  status: RecordingStatus;
+interface RailwayWorkerPayload {
+  recording_id: string;
+  gcs_uri: string;
+  organization_id: string;
+  callback_url: string;
+  file_name: string;
+  file_size: number;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -28,9 +32,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Verify recording exists and is in 'uploading' state
     const { data: recording, error: fetchError } = await supabase
       .from("recordings")
-      .select("id, status")
+      .select("*")
       .eq("id", recordingId)
-      .single<RecordingData>();
+      .single<Recording>();
 
     if (fetchError || !recording) {
       return NextResponse.json(
@@ -60,18 +64,16 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // TODO: Send webhook to Railway to start processing
-    // This would trigger the transcription pipeline
-    // await fetch(process.env.RAILWAY_WEBHOOK_URL, {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ recordingId }),
-    // });
+    // Automatically trigger processing
+    const processingStarted = await triggerProcessing(supabase, recording);
 
     return NextResponse.json({
       success: true,
       recordingId,
-      message: "Upload completed. Processing will start shortly.",
+      message: processingStarted
+        ? "Upload completed. Processing started."
+        : "Upload completed. Processing will start shortly.",
+      processing_started: processingStarted,
     });
   } catch (error) {
     console.error("Upload complete error:", error);
@@ -79,5 +81,101 @@ export async function POST(request: Request, { params }: RouteParams) {
       { error: "Internal server error" },
       { status: 500 }
     );
+  }
+}
+
+async function triggerProcessing(
+  supabase: ReturnType<typeof createAdminClient>,
+  recording: Recording
+): Promise<boolean> {
+  const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
+  const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  if (!railwayWorkerUrl || !railwaySecret) {
+    console.warn(
+      "[Upload] Railway worker not configured, skipping auto-trigger"
+    );
+    return false;
+  }
+
+  try {
+    // Update status to processing
+    await supabase
+      .from("recordings")
+      .update({
+        status: "processing" as RecordingStatus,
+        error_message: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", recording.id);
+
+    // Prepare payload for Railway worker
+    const payload: RailwayWorkerPayload = {
+      recording_id: recording.id,
+      gcs_uri: recording.gcs_uri,
+      organization_id: recording.organization_id,
+      callback_url: `${appUrl}/api/webhook`,
+      file_name: recording.file_name,
+      file_size: recording.file_size,
+    };
+
+    // Send request to Railway worker
+    const response = await fetch(railwayWorkerUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${railwaySecret}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        `[Upload] Railway worker request failed: ${response.status} - ${errorText}`
+      );
+
+      // Revert to uploaded status on failure
+      await supabase
+        .from("recordings")
+        .update({
+          status: "uploaded" as RecordingStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", recording.id);
+
+      return false;
+    }
+
+    console.log(
+      `[Upload] Successfully triggered processing for recording ${recording.id}`
+    );
+
+    // Create initial processing job record
+    await supabase.from("processing_jobs").insert({
+      recording_id: recording.id,
+      job_type: "transcription",
+      status: "pending",
+      started_at: null,
+      completed_at: null,
+      error_message: null,
+      google_operation_name: null,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[Upload] Failed to trigger processing:", error);
+
+    // Revert to uploaded status on error
+    await supabase
+      .from("recordings")
+      .update({
+        status: "uploaded" as RecordingStatus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", recording.id);
+
+    return false;
   }
 }
