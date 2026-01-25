@@ -153,6 +153,34 @@ export default function RecordingDetailPage({
     alert("AI-анализ будет запущен");
   };
 
+  const handleRetryProcessing = async () => {
+    if (!recordingId) return;
+
+    try {
+      const response = await fetch("/api/webhook/trigger", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ recording_id: recordingId }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to retry processing");
+      }
+
+      // Refresh recording data to show new status
+      const refreshResponse = await fetch(`/api/recordings/${recordingId}`);
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setRecording(data);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось запустить обработку");
+    }
+  };
+
   const handleSpeakerUpdate = async (speakerId: string, name: string) => {
     // TODO: Implement speaker name update via API
     console.log("Update speaker:", speakerId, name);
@@ -203,6 +231,7 @@ export default function RecordingDetailPage({
           <ProcessingStatus
             status={recording.status}
             errorMessage={recording.error_message}
+            onRetry={handleRetryProcessing}
           />
         </div>
       </div>

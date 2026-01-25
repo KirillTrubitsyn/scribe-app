@@ -96,6 +96,15 @@ async function triggerProcessing(
     console.warn(
       "[Upload] Railway worker not configured, skipping auto-trigger"
     );
+    // Set error status so user knows processing cannot start
+    await supabase
+      .from("recordings")
+      .update({
+        status: "error" as RecordingStatus,
+        error_message: "Сервер обработки не настроен. Обратитесь к администратору.",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", recording.id);
     return false;
   }
 
@@ -136,11 +145,12 @@ async function triggerProcessing(
         `[Upload] Railway worker request failed: ${response.status} - ${errorText}`
       );
 
-      // Revert to uploaded status on failure
+      // Set error status so user can see and retry
       await supabase
         .from("recordings")
         .update({
-          status: "uploaded" as RecordingStatus,
+          status: "error" as RecordingStatus,
+          error_message: "Не удалось запустить обработку. Попробуйте снова.",
           updated_at: new Date().toISOString(),
         })
         .eq("id", recording.id);
@@ -167,11 +177,12 @@ async function triggerProcessing(
   } catch (error) {
     console.error("[Upload] Failed to trigger processing:", error);
 
-    // Revert to uploaded status on error
+    // Set error status so user can see and retry
     await supabase
       .from("recordings")
       .update({
-        status: "uploaded" as RecordingStatus,
+        status: "error" as RecordingStatus,
+        error_message: "Произошла ошибка при запуске обработки. Попробуйте снова.",
         updated_at: new Date().toISOString(),
       })
       .eq("id", recording.id);
