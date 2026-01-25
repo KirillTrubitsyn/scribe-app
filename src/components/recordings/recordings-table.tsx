@@ -1,0 +1,180 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { cn, formatDate, formatDuration } from "@/lib/utils";
+import { FileAudio, MoreHorizontal, Trash2, Download, Edit } from "lucide-react";
+import { StatusBadge } from "./status-badge";
+import type { Recording, RecordingStatus } from "@/types/database";
+import { useState, useRef, useEffect } from "react";
+
+export type RecordingWithRelations = Recording & {
+  transcripts?: { word_count: number }[] | null;
+  speakers?: { count: number }[] | null;
+};
+
+interface RecordingsTableProps {
+  recordings: RecordingWithRelations[];
+  className?: string;
+}
+
+function ActionMenu({ recordingId }: { recordingId: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleAction = (action: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    // TODO: Implement actions
+    console.log(`Action: ${action} for recording: ${recordingId}`);
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
+        className={cn(
+          "p-2 rounded-lg transition-colors",
+          "text-slate-400 hover:text-white hover:bg-slate-700/50"
+        )}
+      >
+        <MoreHorizontal className="w-5 h-5" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-1 z-10 w-48 py-1 rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
+          <button
+            onClick={(e) => handleAction("edit", e)}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white"
+          >
+            <Edit className="w-4 h-4" />
+            Переименовать
+          </button>
+          <button
+            onClick={(e) => handleAction("download", e)}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white"
+          >
+            <Download className="w-4 h-4" />
+            Скачать
+          </button>
+          <hr className="my-1 border-slate-700" />
+          <button
+            onClick={(e) => handleAction("delete", e)}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300"
+          >
+            <Trash2 className="w-4 h-4" />
+            Удалить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getSpeakersCount(speakers: { count: number }[] | null | undefined): number {
+  if (!speakers || speakers.length === 0) return 0;
+  return speakers[0]?.count ?? 0;
+}
+
+export function RecordingsTable({ recordings, className }: RecordingsTableProps) {
+  const router = useRouter();
+
+  const handleRowClick = (recordingId: string) => {
+    router.push(`/recordings/${recordingId}`);
+  };
+
+  if (recordings.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
+          <FileAudio className="w-8 h-8 text-slate-500" />
+        </div>
+        <h3 className="text-lg font-medium text-white mb-2">Нет записей</h3>
+        <p className="text-slate-400 text-sm">
+          Загрузите аудиофайл, чтобы начать работу
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("overflow-hidden rounded-xl border border-slate-700/50", className)}>
+      <table className="w-full">
+        <thead>
+          <tr className="bg-slate-800/50 border-b border-slate-700/50">
+            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+              Название
+            </th>
+            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+              Дата
+            </th>
+            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+              Длительность
+            </th>
+            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+              Спикеры
+            </th>
+            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+              Статус
+            </th>
+            <th className="w-12 px-6 py-4"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {recordings.map((recording) => (
+            <tr
+              key={recording.id}
+              onClick={() => handleRowClick(recording.id)}
+              className={cn(
+                "border-b border-slate-700/30 last:border-0",
+                "hover:bg-slate-800/50 transition-colors cursor-pointer",
+                "group"
+              )}
+            >
+              <td className="px-6 py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                    <FileAudio className="w-5 h-5 text-orange-400" />
+                  </div>
+                  <span className="font-medium text-white group-hover:text-orange-400 transition-colors truncate max-w-[300px]">
+                    {recording.title}
+                  </span>
+                </div>
+              </td>
+              <td className="px-6 py-4 text-slate-400 text-sm">
+                {formatDate(recording.created_at)}
+              </td>
+              <td className="px-6 py-4 text-slate-400 text-sm">
+                {recording.duration_seconds
+                  ? formatDuration(recording.duration_seconds)
+                  : "—"}
+              </td>
+              <td className="px-6 py-4 text-slate-400 text-sm">
+                {getSpeakersCount(recording.speakers) || "—"}
+              </td>
+              <td className="px-6 py-4">
+                <StatusBadge status={recording.status} />
+              </td>
+              <td className="px-6 py-4">
+                <ActionMenu recordingId={recording.id} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
