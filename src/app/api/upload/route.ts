@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { getStorageClient } from "@/lib/google/storage";
 import { getBucketName } from "@/lib/google/credentials";
 import type { RecordingInsert } from "@/types/database";
+
+// Development organization UUID for anonymous uploads
+const DEV_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000000";
 
 const ALLOWED_CONTENT_TYPES = [
   "audio/mpeg",
@@ -65,11 +68,16 @@ export async function POST(request: Request) {
     const gcsFileName = `recordings/${recordingId}/${fileName}`;
     const gcsUri = `gs://${getBucketName()}/${gcsFileName}`;
 
+    // Use admin client for database operations to bypass RLS
+    const adminClient = createAdminClient();
+
     // Create recording in database with 'uploading' status
-    const { error: dbError } = await supabase.from("recordings").insert({
+    // For now, use dev organization for all uploads (proper org lookup can be added later)
+    // Set user_id to actual user if authenticated, or null for anonymous uploads
+    const { error: dbError } = await adminClient.from("recordings").insert({
       id: recordingId,
-      organization_id: user?.id || "anonymous", // Use user ID or anonymous
-      user_id: user?.id || "anonymous",
+      organization_id: DEV_ORGANIZATION_ID,
+      user_id: user?.id || null,
       title: title || fileName.replace(/\.[^/.]+$/, ""), // Remove extension if no title
       gcs_uri: gcsUri,
       file_name: fileName,
@@ -77,7 +85,7 @@ export async function POST(request: Request) {
       duration_seconds: null,
       status: "uploading",
       error_message: null,
-    });
+    } as RecordingInsert);
 
     if (dbError) {
       console.error("Database error:", dbError);

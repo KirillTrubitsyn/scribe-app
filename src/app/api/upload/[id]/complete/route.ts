@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import type { RecordingStatus } from "@/types/database";
 
 interface RouteParams {
@@ -22,7 +22,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const supabase = await createClient();
+    // Use admin client to bypass RLS
+    const supabase = createAdminClient();
 
     // Verify recording exists and is in 'uploading' state
     const { data: recording, error: fetchError } = await supabase
