@@ -23,10 +23,10 @@ export interface TranscriptionResult {
 // ============================================
 
 function getGoogleCredentials(): { projectId: string; credentials: object } {
-  const credentialsJson = process.env.GOOGLE_CREDENTIALS_JSON
+  const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
 
   if (!credentialsJson) {
-    throw new Error('Missing GOOGLE_CREDENTIALS_JSON environment variable')
+    throw new Error('Missing GOOGLE_APPLICATION_CREDENTIALS_JSON environment variable')
   }
 
   try {
