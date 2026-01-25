@@ -258,6 +258,9 @@ async function handleProcessingStarted(
       job_type: "transcription",
       status: "running",
       started_at: new Date().toISOString(),
+      completed_at: null,
+      error_message: null,
+      google_operation_name: null,
     },
     { onConflict: "id" }
   );
@@ -340,6 +343,9 @@ async function handleTranscriptionCompleted(
     job_type: "analysis",
     status: "running",
     started_at: new Date().toISOString(),
+    completed_at: null,
+    error_message: null,
+    google_operation_name: null,
   });
 }
 

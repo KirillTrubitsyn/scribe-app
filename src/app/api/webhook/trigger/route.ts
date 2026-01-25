@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
+import type { Recording } from "@/types/database";
 
 // ============================================
 // Types
@@ -54,18 +55,20 @@ export async function POST(request: Request) {
   // 3. Get recording details with admin client to bypass RLS
   const adminClient = createAdminClient();
 
-  const { data: recording, error: recordingError } = await adminClient
+  const { data, error: recordingError } = await adminClient
     .from("recordings")
     .select("*")
     .eq("id", recording_id)
     .single();
 
-  if (recordingError || !recording) {
+  if (recordingError || !data) {
     return NextResponse.json(
       { error: "Recording not found" },
       { status: 404 }
     );
   }
+
+  const recording = data as Recording;
 
   // 4. Verify user has access to this recording's organization
   const { data: membership } = await supabase
@@ -185,6 +188,10 @@ export async function POST(request: Request) {
       recording_id: recording_id,
       job_type: "transcription",
       status: "pending",
+      started_at: null,
+      completed_at: null,
+      error_message: null,
+      google_operation_name: null,
     });
 
     return NextResponse.json({
