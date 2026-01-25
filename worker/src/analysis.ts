@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'
-import type { ArtifactData, TranscriptData } from './webhook.js'
+import type { ArtifactData, TranscriptData, SpeakerData } from './webhook.js'
 
 // ============================================
 // Types
@@ -12,6 +12,7 @@ export interface AnalysisResult {
 interface SummaryOutput {
   summary: string
   key_points: string[]
+  main_topics: string[]
   participants_mentioned: string[]
 }
 
@@ -25,6 +26,7 @@ interface ProtocolOutput {
     summary: string
     decisions: string[]
   }>
+  conclusions: string[]
   next_steps: string[]
 }
 
@@ -34,6 +36,7 @@ interface ActionItemsOutput {
     assignee: string | null
     deadline: string | null
     priority: 'high' | 'medium' | 'low'
+    context: string
   }>
 }
 
@@ -56,6 +59,11 @@ interface AnalyticsOutput {
     decision_count: number
     action_items_count: number
   }
+  meeting_effectiveness: {
+    score: number
+    strengths: string[]
+    improvements: string[]
+  }
 }
 
 // ============================================
@@ -72,7 +80,7 @@ function getGeminiClient(): GenerativeModel {
   const genAI = new GoogleGenerativeAI(apiKey)
 
   return genAI.getGenerativeModel({
-    model: 'gemini-1.5-pro',
+    model: 'gemini-3.0-flash-preview',
     generationConfig: {
       temperature: 0.3,
       topP: 0.8,
@@ -83,85 +91,101 @@ function getGeminiClient(): GenerativeModel {
 }
 
 // ============================================
-// Prompts
+// Russian Prompts
 // ============================================
 
-const SUMMARY_PROMPT = `Analyze the following meeting transcript and provide a structured summary.
+const SUMMARY_PROMPT = `Ты — профессиональный ассистент для анализа деловых совещаний.
 
-Your response must be valid JSON with this exact structure:
+Проанализируй транскрипт совещания и создай структурированное резюме.
+
+Твой ответ должен быть валидным JSON со следующей структурой:
 {
-  "summary": "A comprehensive 2-3 paragraph summary of the meeting",
-  "key_points": ["Key point 1", "Key point 2", ...],
-  "participants_mentioned": ["Name 1", "Name 2", ...]
+  "summary": "Подробное резюме совещания в 2-3 абзацах",
+  "key_points": ["Ключевой вывод 1", "Ключевой вывод 2", ...],
+  "main_topics": ["Основная тема 1", "Основная тема 2", ...],
+  "participants_mentioned": ["Имя 1", "Имя 2", ...]
 }
 
-Focus on:
-- Main topics discussed
-- Key decisions made
-- Important points raised
-- Any deadlines or commitments mentioned
+Сфокусируйся на:
+- Главных темах обсуждения
+- Принятых решениях
+- Важных моментах и договорённостях
+- Упомянутых сроках и обязательствах
 
-Transcript:
+Пиши чётко, профессионально, по существу.
+
+Транскрипт:
 `
 
-const PROTOCOL_PROMPT = `Create a formal meeting protocol from the following transcript.
+const PROTOCOL_PROMPT = `Ты — секретарь совещания. Создай официальный протокол на основе транскрипта.
 
-Your response must be valid JSON with this exact structure:
+Твой ответ должен быть валидным JSON со следующей структурой:
 {
-  "title": "Meeting title based on content",
-  "date": "Date mentioned or 'Not specified'",
-  "participants": ["Participant 1", "Participant 2", ...],
-  "agenda": ["Agenda item 1", "Agenda item 2", ...],
+  "title": "Название совещания (определи по содержанию)",
+  "date": "Дата совещания (если упоминается) или 'Не указано'",
+  "participants": ["Участник 1", "Участник 2", ...],
+  "agenda": ["Пункт повестки 1", "Пункт повестки 2", ...],
   "discussion": [
     {
-      "topic": "Topic name",
-      "summary": "Summary of discussion",
-      "decisions": ["Decision 1", "Decision 2"]
+      "topic": "Название темы",
+      "summary": "Краткое содержание обсуждения",
+      "decisions": ["Решение 1", "Решение 2"]
     }
   ],
-  "next_steps": ["Next step 1", "Next step 2", ...]
+  "conclusions": ["Итог 1", "Итог 2", ...],
+  "next_steps": ["Следующий шаг 1", "Следующий шаг 2", ...]
 }
 
-Be formal and professional in tone.
+Требования:
+- Используй деловой стиль
+- Формулируй решения чётко и конкретно
+- Указывай ответственных, если они упоминаются
+- Группируй обсуждение по логическим темам
 
-Transcript:
+Транскрипт:
 `
 
-const ACTION_ITEMS_PROMPT = `Extract all action items from the following meeting transcript.
+const ACTION_ITEMS_PROMPT = `Ты — помощник по управлению задачами. Извлеки все задачи и поручения из транскрипта совещания.
 
-Your response must be valid JSON with this exact structure:
+Твой ответ должен быть валидным JSON со следующей структурой:
 {
   "action_items": [
     {
-      "task": "Description of the task",
-      "assignee": "Name of person responsible or null if not specified",
-      "deadline": "Deadline mentioned or null if not specified",
-      "priority": "high" | "medium" | "low"
+      "task": "Описание задачи",
+      "assignee": "Имя ответственного или null",
+      "deadline": "Срок выполнения или null",
+      "priority": "high" | "medium" | "low",
+      "context": "Контекст из обсуждения"
     }
   ]
 }
 
-Look for:
-- Explicit assignments ("John will...", "We need to...")
-- Commitments made by participants
-- Follow-up tasks mentioned
-- Deadlines or timeframes
+Ищи:
+- Явные поручения ("Иван, сделай...", "Нужно подготовить...")
+- Взятые обязательства ("Я займусь...", "Мы сделаем...")
+- Договорённости о действиях
+- Упомянутые дедлайны ("до пятницы", "на следующей неделе")
 
-Transcript:
+Приоритеты:
+- high: срочные задачи, критичные для проекта
+- medium: важные, но не срочные задачи
+- low: второстепенные задачи, пожелания
+
+Транскрипт:
 `
 
-const ANALYTICS_PROMPT = `Analyze the following meeting transcript and provide detailed analytics.
+const ANALYTICS_PROMPT = `Ты — аналитик эффективности совещаний. Проанализируй транскрипт и предоставь аналитику.
 
-Your response must be valid JSON with this exact structure:
+Твой ответ должен быть валидным JSON со следующей структурой:
 {
   "speaking_time_distribution": {
-    "Speaker 1": 35,
-    "Speaker 2": 45,
-    "Others": 20
+    "Спикер 1": 35,
+    "Спикер 2": 45,
+    "Остальные": 20
   },
   "topics_discussed": [
     {
-      "topic": "Topic name",
+      "topic": "Название темы",
       "duration_percentage": 25
     }
   ],
@@ -169,9 +193,9 @@ Your response must be valid JSON with this exact structure:
     "overall": "positive" | "neutral" | "negative",
     "key_moments": [
       {
-        "timestamp": "Approximate time or segment reference",
+        "timestamp": "Примерное время или ссылка на сегмент",
         "sentiment": "positive/negative/neutral",
-        "context": "Brief description"
+        "context": "Краткое описание момента"
       }
     ]
   },
@@ -179,23 +203,36 @@ Your response must be valid JSON with this exact structure:
     "question_count": 5,
     "decision_count": 3,
     "action_items_count": 7
+  },
+  "meeting_effectiveness": {
+    "score": 75,
+    "strengths": ["Сильная сторона 1", "Сильная сторона 2"],
+    "improvements": ["Рекомендация 1", "Рекомендация 2"]
   }
 }
 
-Provide realistic estimates based on the content.
+Оценки должны быть реалистичными на основе содержания.
+Эффективность оценивай по шкале 0-100:
+- Были ли приняты решения?
+- Распределены ли задачи?
+- Было ли обсуждение конструктивным?
+- Не было ли уходов от темы?
 
-Transcript:
+Транскрипт:
 `
 
 // ============================================
 // Analysis Functions
 // ============================================
 
-export async function analyzeTranscript(transcript: TranscriptData): Promise<AnalysisResult> {
+export async function analyzeTranscript(
+  transcript: TranscriptData,
+  speakers?: SpeakerData[]
+): Promise<AnalysisResult> {
   console.log('[Analysis] Starting transcript analysis')
 
   const model = getGeminiClient()
-  const fullText = transcript.full_text
+  const fullText = prepareTranscriptForAnalysis(transcript, speakers)
 
   if (!fullText || fullText.length < 50) {
     console.log('[Analysis] Transcript too short, generating minimal artifacts')
@@ -204,8 +241,9 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
         {
           type: 'summary',
           content: JSON.stringify({
-            summary: 'Transcript is too short for meaningful analysis.',
+            summary: 'Транскрипт слишком короткий для полноценного анализа.',
             key_points: [],
+            main_topics: [],
             participants_mentioned: [],
           }),
         },
@@ -213,7 +251,8 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
     }
   }
 
-  // Run all analyses in parallel
+  // Run all analyses in parallel for speed
+  console.log('[Analysis] Running all analyses in parallel...')
   const [summary, protocol, actionItems, analytics] = await Promise.all([
     generateSummary(model, fullText),
     generateProtocol(model, fullText),
@@ -229,6 +268,7 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
       content: JSON.stringify(summary),
       metadata: { generated_at: new Date().toISOString() },
     })
+    console.log('[Analysis] Summary generated successfully')
   }
 
   if (protocol) {
@@ -237,6 +277,7 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
       content: JSON.stringify(protocol),
       metadata: { generated_at: new Date().toISOString() },
     })
+    console.log('[Analysis] Protocol generated successfully')
   }
 
   if (actionItems) {
@@ -248,6 +289,7 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
         count: actionItems.action_items.length,
       },
     })
+    console.log(`[Analysis] Action items generated: ${actionItems.action_items.length} items`)
   }
 
   if (analytics) {
@@ -256,12 +298,57 @@ export async function analyzeTranscript(transcript: TranscriptData): Promise<Ana
       content: JSON.stringify(analytics),
       metadata: { generated_at: new Date().toISOString() },
     })
+    console.log('[Analysis] Analytics generated successfully')
   }
 
-  console.log(`[Analysis] Generated ${artifacts.length} artifacts`)
+  console.log(`[Analysis] Completed: ${artifacts.length} artifacts generated`)
 
   return { artifacts }
 }
+
+// ============================================
+// Transcript Preparation
+// ============================================
+
+function prepareTranscriptForAnalysis(
+  transcript: TranscriptData,
+  speakers?: SpeakerData[]
+): string {
+  // If we have segments with speaker info, format them nicely
+  if (transcript.segments && transcript.segments.length > 0) {
+    const speakerNameMap = new Map<string, string>()
+
+    // Build speaker name mapping
+    if (speakers) {
+      for (const speaker of speakers) {
+        const key = `Speaker ${speaker.speaker_index}`
+        speakerNameMap.set(key, speaker.name || key)
+      }
+    }
+
+    // Format transcript with speaker labels
+    const formattedSegments = transcript.segments.map(segment => {
+      const speakerName = speakerNameMap.get(segment.speaker) || segment.speaker
+      const timestamp = formatTimestamp(segment.start)
+      return `[${timestamp}] ${speakerName}: ${segment.text}`
+    })
+
+    return formattedSegments.join('\n\n')
+  }
+
+  // Fallback to full text
+  return transcript.full_text
+}
+
+function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+}
+
+// ============================================
+// Generation Functions
+// ============================================
 
 async function generateSummary(
   model: GenerativeModel,
@@ -336,7 +423,6 @@ async function generateAnalytics(
 // ============================================
 
 function parseJsonResponse<T>(response: string): T | null {
-  // Extract JSON from response (may be wrapped in markdown code blocks)
   let jsonStr = response.trim()
 
   // Remove markdown code block if present
@@ -345,11 +431,17 @@ function parseJsonResponse<T>(response: string): T | null {
     jsonStr = jsonMatch[1].trim()
   }
 
+  // Try to find JSON object in the response
+  const objectMatch = jsonStr.match(/\{[\s\S]*\}/)
+  if (objectMatch) {
+    jsonStr = objectMatch[0]
+  }
+
   try {
     return JSON.parse(jsonStr) as T
   } catch (error) {
     console.error('[Analysis] Failed to parse JSON response:', error)
-    console.error('[Analysis] Raw response:', response.substring(0, 500))
+    console.error('[Analysis] Raw response (first 500 chars):', response.substring(0, 500))
     return null
   }
 }
