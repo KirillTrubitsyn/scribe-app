@@ -180,9 +180,9 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
   }
 
   return (
-    <div className={cn("overflow-hidden rounded-xl border border-slate-700/50", className)}>
+    <div className={cn("rounded-xl border border-slate-700/50", className)}>
       <table className="w-full">
-        <thead>
+        <thead className="overflow-hidden rounded-t-xl">
           <tr className="bg-slate-800/50 border-b border-slate-700/50">
             <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
               Название
