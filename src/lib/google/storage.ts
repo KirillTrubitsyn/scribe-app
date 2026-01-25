@@ -12,6 +12,14 @@ export function getStorageClient(): Storage {
   return storageClient;
 }
 
+export function parseGcsUri(uri: string): { bucket: string; path: string } {
+  const match = uri.match(/^gs:\/\/([^/]+)\/(.+)$/);
+  if (!match) {
+    throw new Error(`Invalid GCS URI: ${uri}`);
+  }
+  return { bucket: match[1], path: match[2] };
+}
+
 export async function uploadFile(
   buffer: Buffer,
   filename: string,
@@ -31,6 +39,46 @@ export async function uploadFile(
   return `gs://${getBucketName()}/${filename}`;
 }
 
+export async function generateUploadSignedUrl(
+  fileName: string,
+  contentType: string,
+  organizationId: string,
+  recordingId: string
+): Promise<{ url: string; gcsUri: string }> {
+  const storage = getStorageClient();
+  const bucketName = getBucketName();
+  const bucket = storage.bucket(bucketName);
+  const filePath = `${organizationId}/${recordingId}/${fileName}`;
+  const file = bucket.file(filePath);
+
+  const [url] = await file.getSignedUrl({
+    version: "v4",
+    action: "resumable",
+    expires: Date.now() + 60 * 60 * 1000, // 1 hour
+    contentType,
+  });
+
+  return {
+    url,
+    gcsUri: `gs://${bucketName}/${filePath}`,
+  };
+}
+
+export async function generateDownloadSignedUrl(gcsUri: string): Promise<string> {
+  const { bucket: bucketName, path } = parseGcsUri(gcsUri);
+  const storage = getStorageClient();
+  const bucket = storage.bucket(bucketName);
+  const file = bucket.file(path);
+
+  const [url] = await file.getSignedUrl({
+    version: "v4",
+    action: "read",
+    expires: Date.now() + 60 * 60 * 1000, // 1 hour
+  });
+
+  return url;
+}
+
 export async function getSignedUrl(
   filename: string,
   expirationMinutes: number = 60
@@ -47,10 +95,11 @@ export async function getSignedUrl(
   return url;
 }
 
-export async function deleteFile(filename: string): Promise<void> {
+export async function deleteFile(gcsUri: string): Promise<void> {
+  const { bucket: bucketName, path } = parseGcsUri(gcsUri);
   const storage = getStorageClient();
-  const bucket = storage.bucket(getBucketName());
-  const file = bucket.file(filename);
+  const bucket = storage.bucket(bucketName);
+  const file = bucket.file(path);
 
   await file.delete();
 }
