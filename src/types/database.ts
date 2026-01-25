@@ -1,57 +1,243 @@
+// ============================================
+// Enum Types
+// ============================================
+
+export type OrganizationRole = 'owner' | 'admin' | 'member'
+
 export type RecordingStatus =
-  | "pending"
-  | "uploading"
-  | "processing"
-  | "transcribing"
-  | "analyzing"
-  | "completed"
-  | "failed";
+  | 'uploading'
+  | 'uploaded'
+  | 'processing'
+  | 'transcribing'
+  | 'analyzing'
+  | 'ready'
+  | 'error'
 
-export interface Recording {
-  id: string;
-  user_id: string;
-  title: string;
-  description?: string;
-  file_url: string;
-  file_size: number;
-  duration: number;
-  status: RecordingStatus;
-  transcription?: string;
-  summary?: string;
-  action_items?: ActionItem[];
-  created_at: string;
-  updated_at: string;
+export type ArtifactType = 'summary' | 'protocol' | 'action_items' | 'analytics'
+
+export type JobType = 'transcription' | 'analysis'
+
+export type JobStatus = 'pending' | 'running' | 'completed' | 'failed'
+
+// ============================================
+// Table Row Types
+// ============================================
+
+export type Organization = {
+  id: string
+  name: string
+  slug: string
+  created_at: string
 }
 
-export interface ActionItem {
-  id: string;
-  text: string;
-  assignee?: string;
-  deadline?: string;
-  completed: boolean;
+export type OrganizationMember = {
+  organization_id: string
+  user_id: string
+  role: OrganizationRole
+  created_at: string
 }
 
-export interface User {
-  id: string;
-  email: string;
-  full_name?: string;
-  avatar_url?: string;
-  created_at: string;
+export type Recording = {
+  id: string
+  organization_id: string
+  user_id: string
+  title: string
+  gcs_uri: string
+  file_name: string
+  file_size: number
+  duration_seconds: number | null
+  status: RecordingStatus
+  error_message: string | null
+  created_at: string
+  updated_at: string
 }
 
-export interface Database {
+export type TranscriptSegment = {
+  speaker: string
+  start: number
+  end: number
+  text: string
+  confidence: number
+  words?: Array<{
+    word: string
+    start: number
+    end: number
+    confidence: number
+  }>
+}
+
+export type Transcript = {
+  id: string
+  recording_id: string
+  full_text: string
+  segments: TranscriptSegment[]
+  word_count: number
+  language: string
+  created_at: string
+}
+
+export type Artifact = {
+  id: string
+  recording_id: string
+  type: ArtifactType
+  content: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export type Speaker = {
+  id: string
+  recording_id: string
+  speaker_index: number
+  name: string | null
+  role: string | null
+}
+
+export type ProcessingJob = {
+  id: string
+  recording_id: string
+  job_type: JobType
+  status: JobStatus
+  google_operation_name: string | null
+  started_at: string | null
+  completed_at: string | null
+  error_message: string | null
+  created_at: string
+}
+
+// ============================================
+// Insert Types (for creating new records)
+// ============================================
+
+export type OrganizationInsert = Omit<Organization, 'id' | 'created_at'> & {
+  id?: string
+  created_at?: string
+}
+
+export type OrganizationMemberInsert = Omit<OrganizationMember, 'created_at'> & {
+  created_at?: string
+}
+
+export type RecordingInsert = Omit<Recording, 'id' | 'created_at' | 'updated_at'> & {
+  id?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export type TranscriptInsert = Omit<Transcript, 'id' | 'created_at'> & {
+  id?: string
+  created_at?: string
+}
+
+export type ArtifactInsert = Omit<Artifact, 'id' | 'created_at'> & {
+  id?: string
+  created_at?: string
+}
+
+export type SpeakerInsert = Omit<Speaker, 'id'> & {
+  id?: string
+}
+
+export type ProcessingJobInsert = Omit<ProcessingJob, 'id' | 'created_at'> & {
+  id?: string
+  created_at?: string
+}
+
+// ============================================
+// Update Types (for updating existing records)
+// ============================================
+
+export type OrganizationUpdate = Partial<Omit<Organization, 'id' | 'created_at'>>
+
+export type OrganizationMemberUpdate = Partial<Omit<OrganizationMember, 'organization_id' | 'user_id' | 'created_at'>>
+
+export type RecordingUpdate = Partial<Omit<Recording, 'id' | 'created_at' | 'updated_at'>>
+
+export type TranscriptUpdate = Partial<Omit<Transcript, 'id' | 'recording_id' | 'created_at'>>
+
+export type ArtifactUpdate = Partial<Omit<Artifact, 'id' | 'recording_id' | 'created_at'>>
+
+export type SpeakerUpdate = Partial<Omit<Speaker, 'id' | 'recording_id'>>
+
+export type ProcessingJobUpdate = Partial<Omit<ProcessingJob, 'id' | 'recording_id' | 'created_at'>>
+
+// ============================================
+// Database Schema Type (for Supabase client)
+// ============================================
+
+export type Database = {
   public: {
     Tables: {
+      organizations: {
+        Row: Organization
+        Insert: OrganizationInsert
+        Update: OrganizationUpdate
+      }
+      organization_members: {
+        Row: OrganizationMember
+        Insert: OrganizationMemberInsert
+        Update: OrganizationMemberUpdate
+      }
       recordings: {
-        Row: Recording;
-        Insert: Omit<Recording, "id" | "created_at" | "updated_at">;
-        Update: Partial<Omit<Recording, "id" | "created_at">>;
-      };
-      users: {
-        Row: User;
-        Insert: Omit<User, "id" | "created_at">;
-        Update: Partial<Omit<User, "id" | "created_at">>;
-      };
-    };
-  };
+        Row: Recording
+        Insert: RecordingInsert
+        Update: RecordingUpdate
+      }
+      transcripts: {
+        Row: Transcript
+        Insert: TranscriptInsert
+        Update: TranscriptUpdate
+      }
+      artifacts: {
+        Row: Artifact
+        Insert: ArtifactInsert
+        Update: ArtifactUpdate
+      }
+      speakers: {
+        Row: Speaker
+        Insert: SpeakerInsert
+        Update: SpeakerUpdate
+      }
+      processing_jobs: {
+        Row: ProcessingJob
+        Insert: ProcessingJobInsert
+        Update: ProcessingJobUpdate
+      }
+    }
+    Enums: {
+      organization_role: OrganizationRole
+      recording_status: RecordingStatus
+      artifact_type: ArtifactType
+      job_type: JobType
+      job_status: JobStatus
+    }
+  }
+}
+
+// ============================================
+// Helper Types
+// ============================================
+
+// Recording with related data
+export type RecordingWithTranscript = Recording & {
+  transcript: Transcript | null
+}
+
+export type RecordingWithArtifacts = Recording & {
+  artifacts: Artifact[]
+}
+
+export type RecordingWithSpeakers = Recording & {
+  speakers: Speaker[]
+}
+
+export type RecordingFull = Recording & {
+  transcript: Transcript | null
+  artifacts: Artifact[]
+  speakers: Speaker[]
+}
+
+// Organization with members
+export type OrganizationWithMembers = Organization & {
+  members: OrganizationMember[]
 }
