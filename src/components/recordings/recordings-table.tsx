@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
-import { FileAudio, MoreHorizontal, Trash2, Download, Edit } from "lucide-react";
+import { FileAudio, MoreHorizontal, Trash2, Download, Edit, Loader2 } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import type { Recording, RecordingStatus } from "@/types/database";
 import { useState, useRef, useEffect } from "react";
@@ -19,6 +19,7 @@ interface RecordingsTableProps {
 
 function ActionMenu({ recordingId }: { recordingId: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,10 +33,39 @@ function ActionMenu({ recordingId }: { recordingId: string }) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    setIsDownloading(true);
+
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/download`);
+      if (!response.ok) {
+        throw new Error("Failed to get download URL");
+      }
+
+      const { url, fileName } = await response.json();
+
+      // Create a temporary link and trigger download
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.target = "_blank";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Download failed:", error);
+      alert("Не удалось скачать запись");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const handleAction = (action: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(false);
-    // TODO: Implement actions
+    // TODO: Implement edit and delete actions
     console.log(`Action: ${action} for recording: ${recordingId}`);
   };
 
@@ -64,11 +94,16 @@ function ActionMenu({ recordingId }: { recordingId: string }) {
             Переименовать
           </button>
           <button
-            onClick={(e) => handleAction("download", e)}
-            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white"
+            onClick={handleDownload}
+            disabled={isDownloading}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white disabled:opacity-50"
           >
-            <Download className="w-4 h-4" />
-            Скачать
+            {isDownloading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            {isDownloading ? "Загрузка..." : "Скачать"}
           </button>
           <hr className="my-1 border-slate-700" />
           <button
