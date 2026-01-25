@@ -271,15 +271,13 @@ async function handleProcessingStarted(
   }
 
   // Create processing job record
+  // Note: Only include required fields - nullable columns will default to NULL
   const { error } = await supabase.from("processing_jobs").insert({
     id: jobId,
     recording_id: recordingId,
     job_type: "transcription",
     status: "running",
     started_at: new Date().toISOString(),
-    completed_at: null,
-    error_message: null,
-    google_operation_name: null,
   });
 
   if (error) {
@@ -364,6 +362,7 @@ async function handleTranscriptionCompleted(
   }
 
   // Create analysis job
+  // Note: Only include required fields - nullable columns will default to NULL
   const { error: analysisJobError } = await supabase
     .from("processing_jobs")
     .insert({
@@ -371,9 +370,6 @@ async function handleTranscriptionCompleted(
       job_type: "analysis",
       status: "running",
       started_at: new Date().toISOString(),
-      completed_at: null,
-      error_message: null,
-      google_operation_name: null,
     });
 
   if (analysisJobError) {
