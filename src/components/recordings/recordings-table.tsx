@@ -17,9 +17,10 @@ interface RecordingsTableProps {
   className?: string;
 }
 
-function ActionMenu({ recordingId }: { recordingId: string }) {
+function ActionMenu({ recordingId, onDeleted }: { recordingId: string; onDeleted: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,11 +63,31 @@ function ActionMenu({ recordingId }: { recordingId: string }) {
     }
   };
 
-  const handleAction = (action: string, e: React.MouseEvent) => {
+  const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     setIsOpen(false);
-    // TODO: Implement edit and delete actions
-    console.log(`Action: ${action} for recording: ${recordingId}`);
+
+    if (!confirm("Вы уверены, что хотите удалить эту запись?")) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete recording");
+      }
+
+      onDeleted();
+    } catch (error) {
+      console.error("Delete failed:", error);
+      alert("Не удалось удалить запись");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -87,7 +108,11 @@ function ActionMenu({ recordingId }: { recordingId: string }) {
       {isOpen && (
         <div className="absolute right-0 top-full mt-1 z-10 w-48 py-1 rounded-lg bg-slate-800 border border-slate-700 shadow-xl">
           <button
-            onClick={(e) => handleAction("edit", e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(false);
+              // TODO: Implement rename
+            }}
             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white"
           >
             <Edit className="w-4 h-4" />
@@ -107,11 +132,16 @@ function ActionMenu({ recordingId }: { recordingId: string }) {
           </button>
           <hr className="my-1 border-slate-700" />
           <button
-            onClick={(e) => handleAction("delete", e)}
-            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300"
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
           >
-            <Trash2 className="w-4 h-4" />
-            Удалить
+            {isDeleting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            {isDeleting ? "Удаление..." : "Удалить"}
           </button>
         </div>
       )}
@@ -129,6 +159,10 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
 
   const handleRowClick = (recordingId: string) => {
     router.push(`/recordings/${recordingId}`);
+  };
+
+  const handleRecordingDeleted = () => {
+    router.refresh();
   };
 
   if (recordings.length === 0) {
@@ -204,7 +238,7 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
                 <StatusBadge status={recording.status} />
               </td>
               <td className="px-6 py-4">
-                <ActionMenu recordingId={recording.id} />
+                <ActionMenu recordingId={recording.id} onDeleted={handleRecordingDeleted} />
               </td>
             </tr>
           ))}
