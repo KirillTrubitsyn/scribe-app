@@ -108,16 +108,20 @@ async function triggerProcessing(
     return false;
   }
 
+  // Trim whitespace and normalize URL
+  railwayWorkerUrl = railwayWorkerUrl.trim();
+
   // Ensure URL has protocol
   if (!railwayWorkerUrl.startsWith("http://") && !railwayWorkerUrl.startsWith("https://")) {
     railwayWorkerUrl = "https://" + railwayWorkerUrl;
-    console.log(`[Upload] Added https:// to worker URL`);
   }
 
-  // Ensure URL ends with /process
+  // Remove any trailing slashes
+  railwayWorkerUrl = railwayWorkerUrl.replace(/\/+$/, "");
+
+  // Ensure URL ends with /process (but not /process/process)
   if (!railwayWorkerUrl.endsWith("/process")) {
-    railwayWorkerUrl = railwayWorkerUrl.replace(/\/$/, "") + "/process";
-    console.log(`[Upload] Appended /process to worker URL`);
+    railwayWorkerUrl = railwayWorkerUrl + "/process";
   }
 
   console.log(`[Upload] Final worker URL: ${railwayWorkerUrl}`);
