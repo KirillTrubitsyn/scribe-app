@@ -99,13 +99,10 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
       features: {
         // Enable word-level timestamps
         enableWordTimeOffsets: true,
-        // Speaker diarization configuration
-        diarizationConfig: {
-          minSpeakerCount: 1,
-          maxSpeakerCount: 10,
-        },
-        // Note: Chirp 2 doesn't support enableAutomaticPunctuation (auto-included)
-        // and enableWordConfidence (not available for this model)
+        // Note: Chirp 2 doesn't support:
+        // - enableAutomaticPunctuation (auto-included)
+        // - enableWordConfidence (not available)
+        // - diarizationConfig (not supported for this model)
       },
     },
     files: [{ uri: gcsUri }],
