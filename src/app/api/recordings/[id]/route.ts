@@ -18,32 +18,43 @@ export async function GET(
 
     // Use admin client to bypass RLS (development mode)
     const supabase = createAdminClient();
-    const { data, error } = await supabase
+
+    // Query recording first
+    const { data: recordingData, error: recordingError } = await supabase
       .from("recordings")
-      .select(`
-        *,
-        transcripts(*),
-        artifacts(*),
-        speakers(*)
-      `)
+      .select("*")
       .eq("id", id)
       .single();
 
-    if (error || !data) {
-      console.error("[API /recordings/:id] Error fetching recording:", error);
+    if (recordingError || !recordingData) {
+      console.error("[API /recordings/:id] Error fetching recording:", recordingError);
       return NextResponse.json(
         { error: "Recording not found" },
         { status: 404 }
       );
     }
 
-    const recording = data as unknown as RecordingWithRelations;
+    // Fetch related data with separate queries for reliability
+    // This avoids potential issues with PostgREST FK detection
+    const [transcriptsResult, artifactsResult, speakersResult] = await Promise.all([
+      supabase.from("transcripts").select("*").eq("recording_id", id),
+      supabase.from("artifacts").select("*").eq("recording_id", id),
+      supabase.from("speakers").select("*").eq("recording_id", id),
+    ]);
 
-    // Debug logging for transcription display issue
+    const recording: RecordingWithRelations = {
+      ...(recordingData as Recording),
+      transcripts: (transcriptsResult.data ?? []) as Transcript[],
+      artifacts: (artifactsResult.data ?? []) as Artifact[],
+      speakers: (speakersResult.data ?? []) as Speaker[],
+    };
+
+    // Debug logging
     console.log("[API /recordings/:id] Recording ID:", recording.id);
     console.log("[API /recordings/:id] Recording status:", recording.status);
-    console.log("[API /recordings/:id] Transcripts count:", recording.transcripts?.length ?? 0);
-    if (recording.transcripts?.[0]) {
+    console.log("[API /recordings/:id] Transcripts count:", recording.transcripts.length);
+
+    if (recording.transcripts[0]) {
       const t = recording.transcripts[0];
       console.log("[API /recordings/:id] Transcript ID:", t.id);
       console.log("[API /recordings/:id] Transcript full_text length:", t.full_text?.length ?? 0);
