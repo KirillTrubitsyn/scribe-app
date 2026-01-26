@@ -17,8 +17,25 @@ export async function GET(
     const { id } = await params;
     const supabase = await createClient();
 
-    // Get the recording with related data
-    const { data, error } = await supabase
+    // First, check if user has access to this recording via RLS
+    const { data: recordingAccess, error: accessError } = await supabase
+      .from("recordings")
+      .select("id")
+      .eq("id", id)
+      .single();
+
+    if (accessError || !recordingAccess) {
+      console.error("[API /recordings/:id] Access denied or not found:", accessError);
+      return NextResponse.json(
+        { error: "Recording not found" },
+        { status: 404 }
+      );
+    }
+
+    // User has access - fetch full data with admin client to bypass RLS issues
+    // on related tables (transcripts, artifacts, speakers)
+    const adminClient = createAdminClient();
+    const { data, error } = await adminClient
       .from("recordings")
       .select(`
         *,
