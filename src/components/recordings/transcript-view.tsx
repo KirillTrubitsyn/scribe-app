@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
-import { MessageSquare } from "lucide-react";
+import { useMemo, useState } from "react";
+import { MessageSquare, List, AlignJustify } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import type { Transcript, TranscriptSegment, Speaker } from "@/types/database";
+
+type ViewMode = "segments" | "fulltext";
 
 // Speaker color palette
 const SPEAKER_COLORS = [
@@ -63,6 +65,8 @@ export function TranscriptView({
     return speakerMap.get(speaker)?.name || speaker;
   };
 
+  const [viewMode, setViewMode] = useState<ViewMode>("segments");
+
   if (!transcript || !transcript.segments || transcript.segments.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -76,17 +80,58 @@ export function TranscriptView({
   }
 
   return (
-    <div className="space-y-3">
-      {transcript.segments.map((segment, index) => (
-        <TranscriptSegmentItem
-          key={index}
-          segment={segment}
-          speakerName={getSpeakerName(segment.speaker)}
-          color={SPEAKER_COLORS[getColorIndex(segment.speaker)]}
-          isActive={currentTime >= segment.start && currentTime < segment.end}
-          onClick={() => onSegmentClick?.(segment.start)}
+    <div className="space-y-4">
+      {/* View mode toggle */}
+      <div className="flex items-center justify-end gap-1 p-1 bg-slate-800/50 rounded-lg w-fit ml-auto">
+        <button
+          onClick={() => setViewMode("segments")}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            viewMode === "segments"
+              ? "bg-slate-700 text-white"
+              : "text-slate-400 hover:text-white"
+          )}
+          title="Показать сегменты по спикерам"
+        >
+          <List className="w-4 h-4" />
+          Сегменты
+        </button>
+        <button
+          onClick={() => setViewMode("fulltext")}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+            viewMode === "fulltext"
+              ? "bg-slate-700 text-white"
+              : "text-slate-400 hover:text-white"
+          )}
+          title="Показать сплошной текст"
+        >
+          <AlignJustify className="w-4 h-4" />
+          Текст
+        </button>
+      </div>
+
+      {/* Content based on view mode */}
+      {viewMode === "segments" ? (
+        <div className="space-y-3">
+          {transcript.segments.map((segment, index) => (
+            <TranscriptSegmentItem
+              key={index}
+              segment={segment}
+              speakerName={getSpeakerName(segment.speaker)}
+              color={SPEAKER_COLORS[getColorIndex(segment.speaker)]}
+              isActive={currentTime >= segment.start && currentTime < segment.end}
+              onClick={() => onSegmentClick?.(segment.start)}
+            />
+          ))}
+        </div>
+      ) : (
+        <FullTextView
+          transcript={transcript}
+          currentTime={currentTime}
+          onSegmentClick={onSegmentClick}
         />
-      ))}
+      )}
     </div>
   );
 }
@@ -128,6 +173,57 @@ function TranscriptSegmentItem({
         </span>
       </div>
       <p className="text-slate-200 leading-relaxed">{segment.text}</p>
+    </div>
+  );
+}
+
+// Full text view for continuous reading (better for songs, monologues)
+interface FullTextViewProps {
+  transcript: Transcript;
+  currentTime?: number;
+  onSegmentClick?: (startTime: number) => void;
+}
+
+function FullTextView({ transcript, currentTime = 0, onSegmentClick }: FullTextViewProps) {
+  // Use full_text if available, otherwise concatenate segments
+  const fullText = transcript.full_text ||
+    transcript.segments.map(s => s.text).join(' ');
+
+  // Find current segment for highlighting
+  const currentSegmentIndex = transcript.segments.findIndex(
+    s => currentTime >= s.start && currentTime < s.end
+  );
+
+  // If we have full_text, show it as simple text
+  if (transcript.full_text) {
+    return (
+      <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
+        <p className="text-slate-200 leading-relaxed whitespace-pre-wrap text-base">
+          {fullText}
+        </p>
+      </div>
+    );
+  }
+
+  // Otherwise, show clickable segments as continuous text with highlighting
+  return (
+    <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
+      <p className="text-slate-200 leading-relaxed text-base">
+        {transcript.segments.map((segment, index) => (
+          <span
+            key={index}
+            onClick={() => onSegmentClick?.(segment.start)}
+            className={cn(
+              "cursor-pointer transition-colors hover:text-orange-400",
+              currentSegmentIndex === index && "bg-orange-500/20 text-orange-300 rounded px-1"
+            )}
+            title={`${formatDuration(segment.start)} - ${segment.speaker}`}
+          >
+            {segment.text}
+            {index < transcript.segments.length - 1 ? ' ' : ''}
+          </span>
+        ))}
+      </p>
     </div>
   );
 }
