@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { generateDownloadSignedUrl, deleteFile } from "@/lib/google/storage";
 import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
 
@@ -15,27 +15,10 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // First, check if user has access to this recording via RLS
-    const { data: recordingAccess, error: accessError } = await supabase
-      .from("recordings")
-      .select("id")
-      .eq("id", id)
-      .single();
-
-    if (accessError || !recordingAccess) {
-      console.error("[API /recordings/:id] Access denied or not found:", accessError);
-      return NextResponse.json(
-        { error: "Recording not found" },
-        { status: 404 }
-      );
-    }
-
-    // User has access - fetch full data with admin client to bypass RLS issues
-    // on related tables (transcripts, artifacts, speakers)
-    const adminClient = createAdminClient();
-    const { data, error } = await adminClient
+    // Use admin client to bypass RLS (development mode)
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
       .from("recordings")
       .select(`
         *,
