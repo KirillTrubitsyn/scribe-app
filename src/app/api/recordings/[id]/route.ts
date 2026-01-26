@@ -30,6 +30,7 @@ export async function GET(
       .single();
 
     if (error || !data) {
+      console.error("[API /recordings/:id] Error fetching recording:", error);
       return NextResponse.json(
         { error: "Recording not found" },
         { status: 404 }
@@ -37,6 +38,17 @@ export async function GET(
     }
 
     const recording = data as unknown as RecordingWithRelations;
+
+    // Debug logging for transcription display issue
+    console.log("[API /recordings/:id] Recording ID:", recording.id);
+    console.log("[API /recordings/:id] Recording status:", recording.status);
+    console.log("[API /recordings/:id] Transcripts count:", recording.transcripts?.length ?? 0);
+    if (recording.transcripts?.[0]) {
+      const t = recording.transcripts[0];
+      console.log("[API /recordings/:id] Transcript ID:", t.id);
+      console.log("[API /recordings/:id] Transcript full_text length:", t.full_text?.length ?? 0);
+      console.log("[API /recordings/:id] Transcript segments:", Array.isArray(t.segments) ? `array(${t.segments.length})` : typeof t.segments);
+    }
 
     // Generate audio URL if file exists and not still uploading
     let audioUrl: string | null = null;

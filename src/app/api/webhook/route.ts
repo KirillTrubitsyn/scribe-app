@@ -312,6 +312,9 @@ async function handleTranscriptionCompleted(
 
   // Save transcript if provided
   if (data?.transcript) {
+    console.log(`[Webhook] Preparing to save transcript for ${recordingId}`);
+    console.log(`[Webhook] Transcript data: full_text length=${data.transcript.full_text?.length}, segments count=${data.transcript.segments?.length}, word_count=${data.transcript.word_count}`);
+
     const transcriptInsert: TranscriptInsert = {
       recording_id: recordingId,
       full_text: data.transcript.full_text,
@@ -321,20 +324,27 @@ async function handleTranscriptionCompleted(
     };
 
     // Delete existing transcript (if re-processing)
-    await supabase.from("transcripts").delete().eq("recording_id", recordingId);
+    const { error: deleteError } = await supabase.from("transcripts").delete().eq("recording_id", recordingId);
+    if (deleteError) {
+      console.log(`[Webhook] Delete existing transcript result:`, deleteError);
+    }
 
-    const { error } = await supabase
+    const { data: insertedData, error } = await supabase
       .from("transcripts")
-      .insert(transcriptInsert);
+      .insert(transcriptInsert)
+      .select()
+      .single();
 
     if (error) {
-      console.error("Failed to save transcript:", error);
+      console.error("[Webhook] Failed to save transcript:", error);
       throw error;
     }
 
     console.log(
-      `[Webhook] Saved transcript for ${recordingId} (${data.transcript.word_count} words)`
+      `[Webhook] Saved transcript for ${recordingId} (${data.transcript.word_count} words), transcript_id=${insertedData?.id}`
     );
+  } else {
+    console.log(`[Webhook] No transcript data provided for ${recordingId}`);
   }
 
   // Save speakers if provided
