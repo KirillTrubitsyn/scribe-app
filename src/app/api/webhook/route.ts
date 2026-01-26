@@ -329,11 +329,9 @@ async function handleTranscriptionCompleted(
       console.log(`[Webhook] Delete existing transcript result:`, deleteError);
     }
 
-    const { data: insertedData, error } = await supabase
+    const { error } = await supabase
       .from("transcripts")
-      .insert(transcriptInsert)
-      .select()
-      .single();
+      .insert(transcriptInsert);
 
     if (error) {
       console.error("[Webhook] Failed to save transcript:", error);
@@ -341,7 +339,7 @@ async function handleTranscriptionCompleted(
     }
 
     console.log(
-      `[Webhook] Saved transcript for ${recordingId} (${data.transcript.word_count} words), transcript_id=${insertedData?.id}`
+      `[Webhook] Saved transcript for ${recordingId} (${data.transcript.word_count} words)`
     );
   } else {
     console.log(`[Webhook] No transcript data provided for ${recordingId}`);
