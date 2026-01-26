@@ -94,20 +94,18 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
       autoDecodingConfig: {},
       // Language codes with Russian primary, English fallback
       languageCodes: ['ru-RU', 'en-US'],
-      // Chirp model for best quality
+      // Chirp 2 model for best quality
       model: 'chirp_2',
       features: {
-        // Enable automatic punctuation
-        enableAutomaticPunctuation: true,
         // Enable word-level timestamps
         enableWordTimeOffsets: true,
-        // Enable word confidence scores
-        enableWordConfidence: true,
         // Speaker diarization configuration
         diarizationConfig: {
           minSpeakerCount: 1,
           maxSpeakerCount: 10,
         },
+        // Note: Chirp 2 doesn't support enableAutomaticPunctuation (auto-included)
+        // and enableWordConfidence (not available for this model)
       },
     },
     files: [{ uri: gcsUri }],
