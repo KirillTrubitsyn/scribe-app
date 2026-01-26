@@ -1,4 +1,5 @@
-import { v2, protos } from '@google-cloud/speech'
+import { Storage } from '@google-cloud/storage'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { TranscriptSegment } from './supabase.js'
 import type { TranscriptData, SpeakerData } from './webhook.js'
 
@@ -6,131 +7,28 @@ import type { TranscriptData, SpeakerData } from './webhook.js'
 // Types
 // ============================================
 
-// V2 API types
-const { SpeechClient } = v2
-type SpeechClientV2 = InstanceType<typeof SpeechClient>
-
-type IBatchRecognizeResponse = protos.google.cloud.speech.v2.IBatchRecognizeResponse
-type IBatchRecognizeFileResult = protos.google.cloud.speech.v2.IBatchRecognizeFileResult
-type ISpeechRecognitionResult = protos.google.cloud.speech.v2.ISpeechRecognitionResult
-
 export interface TranscriptionResult {
   transcript: TranscriptData
   speakers: SpeakerData[]
   durationSeconds: number
 }
 
-interface WordWithMeta {
-  word: string
+interface GeminiTranscriptSegment {
+  speaker: string
   start: number
   end: number
-  confidence: number
-  speakerTag: number
+  text: string
+}
+
+interface GeminiTranscriptResponse {
+  segments: GeminiTranscriptSegment[]
+  language: string
+  duration_seconds: number
 }
 
 // ============================================
 // Configuration
 // ============================================
-
-// Pause threshold for segment splitting (in seconds)
-const PAUSE_THRESHOLD_SECONDS = 2.0
-
-// Polling configuration
-const POLL_INTERVAL_MS = 10000 // 10 seconds
-const MAX_POLL_TIME_MS = 60 * 60 * 1000 // 1 hour for long recordings
-
-// ============================================
-// Error Message Parsing
-// ============================================
-
-interface ParsedError {
-  userMessage: string
-  technicalDetails: string
-  errorType: 'permission' | 'not_found' | 'invalid_audio' | 'quota' | 'timeout' | 'unknown'
-}
-
-/**
- * Parse GCP error messages and return user-friendly versions
- */
-function parseTranscriptionError(rawError: string): ParsedError {
-  const lowerError = rawError.toLowerCase()
-
-  // Permission/access denied errors
-  if (
-    lowerError.includes('does not have') &&
-    (lowerError.includes('permission') || lowerError.includes('access'))
-  ) {
-    return {
-      userMessage: 'Не удалось получить доступ к аудиофайлу. Пожалуйста, попробуйте загрузить файл заново.',
-      technicalDetails: rawError,
-      errorType: 'permission',
-    }
-  }
-
-  if (lowerError.includes('storage.objects.get') || lowerError.includes('denied on resource')) {
-    return {
-      userMessage: 'Ошибка доступа к файлу в хранилище. Пожалуйста, попробуйте загрузить файл заново.',
-      technicalDetails: rawError,
-      errorType: 'permission',
-    }
-  }
-
-  // File not found errors
-  if (
-    lowerError.includes('not found') ||
-    lowerError.includes('does not exist') ||
-    lowerError.includes('no such object')
-  ) {
-    return {
-      userMessage: 'Аудиофайл не найден. Возможно, он был удален. Пожалуйста, загрузите файл заново.',
-      technicalDetails: rawError,
-      errorType: 'not_found',
-    }
-  }
-
-  // Invalid audio format errors
-  if (
-    lowerError.includes('invalid audio') ||
-    lowerError.includes('unsupported format') ||
-    lowerError.includes('audio encoding') ||
-    lowerError.includes('could not decode')
-  ) {
-    return {
-      userMessage: 'Формат аудиофайла не поддерживается. Пожалуйста, используйте MP3, WAV, M4A или WebM.',
-      technicalDetails: rawError,
-      errorType: 'invalid_audio',
-    }
-  }
-
-  // Quota/rate limit errors
-  if (
-    lowerError.includes('quota') ||
-    lowerError.includes('rate limit') ||
-    lowerError.includes('resource exhausted')
-  ) {
-    return {
-      userMessage: 'Сервис временно перегружен. Пожалуйста, попробуйте через несколько минут.',
-      technicalDetails: rawError,
-      errorType: 'quota',
-    }
-  }
-
-  // Timeout errors
-  if (lowerError.includes('timeout') || lowerError.includes('deadline exceeded')) {
-    return {
-      userMessage: 'Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.',
-      technicalDetails: rawError,
-      errorType: 'timeout',
-    }
-  }
-
-  // Default: unknown error
-  return {
-    userMessage: 'Произошла ошибка при обработке аудио. Пожалуйста, попробуйте еще раз.',
-    technicalDetails: rawError,
-    errorType: 'unknown',
-  }
-}
 
 function getGoogleCredentials(): { projectId: string; credentials: object } {
   const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
@@ -145,258 +43,298 @@ function getGoogleCredentials(): { projectId: string; credentials: object } {
       projectId: credentials.project_id,
       credentials,
     }
-  } catch (error) {
+  } catch {
     throw new Error('Invalid GOOGLE_APPLICATION_CREDENTIALS_JSON format')
   }
 }
 
-// Chirp 2 is only available in specific regions
-const CHIRP_LOCATION = 'us-central1'
-
-function getSpeechClient(): SpeechClientV2 {
+function getStorageClient(): Storage {
   const { projectId, credentials } = getGoogleCredentials()
 
-  return new SpeechClient({
+  return new Storage({
     projectId,
     credentials,
-    // Use regional endpoint for Chirp 2 model
-    apiEndpoint: `${CHIRP_LOCATION}-speech.googleapis.com`,
   })
 }
+
+function getGeminiClient() {
+  const apiKey = process.env.GEMINI_API_KEY
+
+  if (!apiKey) {
+    throw new Error('Missing GEMINI_API_KEY environment variable')
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey)
+
+  return genAI.getGenerativeModel({
+    model: 'gemini-3-flash',
+    generationConfig: {
+      temperature: 0.1,
+      topP: 0.8,
+      topK: 40,
+      maxOutputTokens: 65536,
+    },
+  })
+}
+
+// ============================================
+// Transcription Prompt
+// ============================================
+
+const TRANSCRIPTION_PROMPT = `Ты — профессиональная система транскрибации аудио.
+
+Твоя задача — точно транскрибировать аудиозапись и вернуть результат в формате JSON.
+
+ВАЖНЫЕ ПРАВИЛА:
+1. Транскрибируй ВСЁ содержимое аудио точно, без пропусков
+2. Если говорят несколько человек — определи разных спикеров (Speaker 1, Speaker 2 и т.д.)
+3. Укажи временные метки для каждого сегмента речи
+4. Определи основной язык аудио
+5. Разбивай на сегменты по смене спикера или паузам более 2 секунд
+
+Формат ответа — ТОЛЬКО валидный JSON без markdown:
+{
+  "segments": [
+    {
+      "speaker": "Speaker 1",
+      "start": 0.0,
+      "end": 5.5,
+      "text": "Текст сегмента..."
+    },
+    {
+      "speaker": "Speaker 2",
+      "start": 5.8,
+      "end": 12.3,
+      "text": "Ответ другого спикера..."
+    }
+  ],
+  "language": "ru-RU",
+  "duration_seconds": 120
+}
+
+Если аудио содержит только музыку без речи, верни:
+{
+  "segments": [],
+  "language": "unknown",
+  "duration_seconds": 0
+}
+
+Транскрибируй аудио:`
 
 // ============================================
 // Main Transcription Function
 // ============================================
 
 export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResult> {
-  console.log(`[Transcription] Starting Chirp batch transcription for ${gcsUri}`)
+  console.log(`[Transcription] Starting Gemini transcription for ${gcsUri}`)
 
   try {
-    const client = getSpeechClient()
-    const { projectId } = getGoogleCredentials()
+    // 1. Download audio from GCS
+    console.log('[Transcription] Downloading audio from GCS...')
+    const audioData = await downloadFromGcs(gcsUri)
+    console.log(`[Transcription] Downloaded ${audioData.size} bytes, mime: ${audioData.mimeType}`)
 
-    // Build recognizer path for v2 API (using regional location for Chirp 2)
-    const recognizerPath = `projects/${projectId}/locations/${CHIRP_LOCATION}/recognizers/_`
+    // 2. Send to Gemini for transcription
+    console.log('[Transcription] Sending to Gemini 3 Flash...')
+    const model = getGeminiClient()
 
-    // Start Batch Recognition with Chirp
-    console.log('[Transcription] Initiating batch recognition operation...')
-
-    const [operation] = await client.batchRecognize({
-      recognizer: recognizerPath,
-      config: {
-        // Auto-detect audio encoding
-        autoDecodingConfig: {},
-        // Language codes with Russian primary, English fallback
-        languageCodes: ['ru-RU', 'en-US'],
-        // Chirp 2 model for best quality
-        model: 'chirp_2',
-        features: {
-          // Enable word-level timestamps
-          enableWordTimeOffsets: true,
-          // Note: Chirp 2 doesn't support:
-          // - enableAutomaticPunctuation (auto-included)
-          // - enableWordConfidence (not available)
-          // - diarizationConfig (not supported for this model)
+    const result = await model.generateContent([
+      TRANSCRIPTION_PROMPT,
+      {
+        inlineData: {
+          mimeType: audioData.mimeType,
+          data: audioData.base64,
         },
       },
-      files: [{ uri: gcsUri }],
-      recognitionOutputConfig: {
-        // Return results inline (not to GCS)
-        inlineResponseConfig: {},
+    ])
+
+    const responseText = result.response.text()
+    console.log('[Transcription] Received response from Gemini')
+
+    // 3. Parse response
+    const transcriptResponse = parseTranscriptResponse(responseText)
+
+    if (!transcriptResponse || transcriptResponse.segments.length === 0) {
+      console.log('[Transcription] No speech detected in audio')
+      return createEmptyResult()
+    }
+
+    // 4. Convert to expected format
+    const segments = convertToSegments(transcriptResponse.segments)
+    const fullText = segments.map(s => s.text).join(' ')
+    const wordCount = fullText.split(/\s+/).filter(w => w.length > 0).length
+
+    // Collect unique speakers
+    const speakerSet = new Set<number>()
+    for (const segment of segments) {
+      const match = segment.speaker.match(/Speaker (\d+)/)
+      if (match) {
+        speakerSet.add(parseInt(match[1], 10))
+      }
+    }
+
+    const speakers: SpeakerData[] = Array.from(speakerSet)
+      .sort((a, b) => a - b)
+      .map(index => ({
+        speaker_index: index,
+        name: undefined,
+        role: undefined,
+      }))
+
+    console.log(`[Transcription] Completed: ${wordCount} words, ${segments.length} segments, ${speakers.length} speakers`)
+
+    return {
+      transcript: {
+        full_text: fullText.trim(),
+        segments,
+        word_count: wordCount,
+        language: transcriptResponse.language || 'ru-RU',
       },
-    })
-
-    const operationName = operation.name
-    console.log(`[Transcription] Operation started: ${operationName}`)
-
-    // Poll for completion
-    const response = await pollOperation(operation)
-
-    // Parse and return results
-    console.log('[Transcription] Processing results...')
-    return processChirpResponse(response, gcsUri)
+      speakers,
+      durationSeconds: Math.ceil(transcriptResponse.duration_seconds || 0),
+    }
   } catch (error) {
-    // Handle errors from the API call itself
     const rawError = error instanceof Error ? error.message : String(error)
-    console.error('[Transcription] API error:', rawError)
+    console.error('[Transcription] Error:', rawError)
 
-    // Check if the error is already user-friendly (from processChirpResponse)
-    // by checking if it doesn't contain typical GCP technical markers
-    const isAlreadyUserFriendly =
-      !rawError.includes('@') &&
-      !rawError.includes('gserviceaccount.com') &&
-      !rawError.includes('storage.objects') &&
-      !rawError.includes('gs://')
-
-    if (isAlreadyUserFriendly) {
-      throw error
-    }
-
-    // Parse and convert to user-friendly message
-    const parsed = parseTranscriptionError(rawError)
-    console.error('[Transcription] Error type:', parsed.errorType)
-    throw new Error(parsed.userMessage)
+    // Convert to user-friendly message
+    const userMessage = parseTranscriptionError(rawError)
+    throw new Error(userMessage)
   }
 }
 
 // ============================================
-// Operation Polling
+// GCS Download
 // ============================================
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function pollOperation(
-  operation: any
-): Promise<IBatchRecognizeResponse> {
-  const startTime = Date.now()
-  let lastProgressLog = 0
-
-  while (true) {
-    // Check if operation is complete
-    const [response] = await operation.promise()
-
-    if (response) {
-      console.log('[Transcription] Operation completed successfully')
-      return response as IBatchRecognizeResponse
-    }
-
-    // Check timeout
-    const elapsed = Date.now() - startTime
-    if (elapsed > MAX_POLL_TIME_MS) {
-      const minutes = Math.round(elapsed / 60000)
-      console.error(`[Transcription] Timeout after ${minutes} minutes`)
-      throw new Error('Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.')
-    }
-
-    // Log progress periodically (every 30 seconds)
-    if (elapsed - lastProgressLog >= 30000) {
-      const minutes = Math.round(elapsed / 60000)
-      console.log(`[Transcription] Still processing... (${minutes} min elapsed)`)
-      lastProgressLog = elapsed
-    }
-
-    // Wait before next poll
-    await sleep(POLL_INTERVAL_MS)
-  }
+interface AudioData {
+  size: number
+  base64: string
+  mimeType: string
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
+async function downloadFromGcs(gcsUri: string): Promise<AudioData> {
+  // Parse GCS URI: gs://bucket-name/path/to/file
+  const match = gcsUri.match(/^gs:\/\/([^/]+)\/(.+)$/)
 
-// ============================================
-// Response Processing
-// ============================================
-
-function processChirpResponse(
-  response: IBatchRecognizeResponse,
-  gcsUri: string
-): TranscriptionResult {
-  // Debug: log full response structure
-  console.log('[Transcription] Response keys:', Object.keys(response))
-
-  // Get results for our file
-  const results = response.results || {}
-  console.log('[Transcription] Results keys:', Object.keys(results))
-
-  const fileResult = results[gcsUri] as IBatchRecognizeFileResult | undefined
-
-  if (!fileResult) {
-    console.log('[Transcription] No file result found for URI:', gcsUri)
-    console.log('[Transcription] Available URIs:', Object.keys(results))
-    return createEmptyResult()
+  if (!match) {
+    throw new Error(`Invalid GCS URI format: ${gcsUri}`)
   }
 
-  // Check for errors
-  if (fileResult.error) {
-    const rawError = fileResult.error.message || 'Unknown transcription error'
-    const parsed = parseTranscriptionError(rawError)
+  const [, bucketName, filePath] = match
 
-    console.error('[Transcription] Error in file result:', rawError)
-    console.error('[Transcription] Error type:', parsed.errorType)
+  const storage = getStorageClient()
+  const bucket = storage.bucket(bucketName)
+  const file = bucket.file(filePath)
 
-    // Throw user-friendly message but include technical details in a structured way
-    throw new Error(parsed.userMessage)
-  }
+  // Download file content
+  const [buffer] = await file.download()
 
-  // Debug: log file result structure
-  console.log('[Transcription] File result keys:', Object.keys(fileResult))
+  // Determine MIME type from file extension
+  const mimeType = getMimeType(filePath)
 
-  // Get transcript results from the file result
-  // When using inlineResponseConfig, results are in inlineResult.transcript, not fileResult.transcript
-  // Structure: fileResult.inlineResult.transcript.results
-  const inlineResult = fileResult.inlineResult
-  console.log('[Transcription] Inline result:', inlineResult ? 'exists' : 'null/undefined')
-
-  const transcriptData = inlineResult?.transcript
-  console.log('[Transcription] Transcript data:', transcriptData ? 'exists' : 'null/undefined')
-
-  if (transcriptData) {
-    console.log('[Transcription] Transcript results count:', transcriptData.results?.length || 0)
-  }
-
-  if (!transcriptData || !transcriptData.results || transcriptData.results.length === 0) {
-    console.log('[Transcription] Empty transcript results')
-    return createEmptyResult()
-  }
-
-  const transcriptResults = transcriptData.results
-
-  // Extract all words with metadata
-  const allWords = extractAllWords(transcriptResults)
-
-  if (allWords.length === 0) {
-    console.log('[Transcription] No words extracted from results')
-    return createEmptyResult()
-  }
-
-  // Group words into segments by speaker change or pause
-  const segments = groupWordsIntoSegments(allWords)
-
-  // Build full text
-  const fullText = segments.map(s => s.text).join(' ')
-
-  // Collect unique speakers
-  const speakerSet = new Set<number>()
-  for (const segment of segments) {
-    const speakerIndex = parseInt(segment.speaker.replace('Speaker ', ''), 10)
-    if (!isNaN(speakerIndex)) {
-      speakerSet.add(speakerIndex)
-    }
-  }
-
-  // Calculate total duration
-  const maxEndTime = allWords.length > 0
-    ? Math.max(...allWords.map(w => w.end))
-    : 0
-
-  // Detect primary language from first result
-  const detectedLanguage = transcriptResults[0]?.languageCode || 'ru-RU'
-
-  // Calculate total word count
-  const wordCount = allWords.length
-
-  // Build speaker data
-  const speakers: SpeakerData[] = Array.from(speakerSet)
-    .sort((a, b) => a - b)
-    .map(index => ({
-      speaker_index: index,
-      name: undefined,
-      role: undefined,
-    }))
-
-  console.log(`[Transcription] Processed: ${wordCount} words, ${segments.length} segments, ${speakers.length} speakers`)
+  // Convert to base64
+  const base64 = buffer.toString('base64')
 
   return {
-    transcript: {
-      full_text: fullText.trim(),
-      segments,
-      word_count: wordCount,
-      language: detectedLanguage,
-    },
-    speakers,
-    durationSeconds: Math.ceil(maxEndTime),
+    size: buffer.length,
+    base64,
+    mimeType,
   }
 }
+
+function getMimeType(filePath: string): string {
+  const ext = filePath.split('.').pop()?.toLowerCase()
+
+  const mimeTypes: Record<string, string> = {
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    m4a: 'audio/mp4',
+    webm: 'audio/webm',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+    aac: 'audio/aac',
+  }
+
+  return mimeTypes[ext || ''] || 'audio/mpeg'
+}
+
+// ============================================
+// Response Parsing
+// ============================================
+
+function parseTranscriptResponse(response: string): GeminiTranscriptResponse | null {
+  let jsonStr = response.trim()
+
+  // Remove markdown code block if present
+  const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1].trim()
+  }
+
+  // Try to find JSON object in the response
+  const objectMatch = jsonStr.match(/\{[\s\S]*\}/)
+  if (objectMatch) {
+    jsonStr = objectMatch[0]
+  }
+
+  try {
+    return JSON.parse(jsonStr) as GeminiTranscriptResponse
+  } catch (error) {
+    console.error('[Transcription] Failed to parse JSON response:', error)
+    console.error('[Transcription] Raw response (first 500 chars):', response.substring(0, 500))
+    return null
+  }
+}
+
+function convertToSegments(geminiSegments: GeminiTranscriptSegment[]): TranscriptSegment[] {
+  return geminiSegments.map(seg => ({
+    speaker: seg.speaker,
+    start: seg.start,
+    end: seg.end,
+    text: seg.text,
+    confidence: 0.95, // Gemini doesn't provide confidence, use default
+    words: [], // Word-level data not available from Gemini
+  }))
+}
+
+// ============================================
+// Error Handling
+// ============================================
+
+function parseTranscriptionError(rawError: string): string {
+  const lowerError = rawError.toLowerCase()
+
+  if (lowerError.includes('permission') || lowerError.includes('access denied')) {
+    return 'Не удалось получить доступ к аудиофайлу. Пожалуйста, попробуйте загрузить файл заново.'
+  }
+
+  if (lowerError.includes('not found') || lowerError.includes('does not exist')) {
+    return 'Аудиофайл не найден. Возможно, он был удален. Пожалуйста, загрузите файл заново.'
+  }
+
+  if (lowerError.includes('invalid') || lowerError.includes('unsupported')) {
+    return 'Формат аудиофайла не поддерживается. Пожалуйста, используйте MP3, WAV, M4A или WebM.'
+  }
+
+  if (lowerError.includes('quota') || lowerError.includes('rate limit')) {
+    return 'Сервис временно перегружен. Пожалуйста, попробуйте через несколько минут.'
+  }
+
+  if (lowerError.includes('timeout') || lowerError.includes('deadline')) {
+    return 'Превышено время обработки. Попробуйте загрузить файл меньшего размера.'
+  }
+
+  if (lowerError.includes('too large') || lowerError.includes('size limit')) {
+    return 'Файл слишком большой. Попробуйте загрузить файл меньшего размера или разделить на части.'
+  }
+
+  return 'Произошла ошибка при обработке аудио. Пожалуйста, попробуйте еще раз.'
+}
+
+// ============================================
+// Utilities
+// ============================================
 
 function createEmptyResult(): TranscriptionResult {
   return {
@@ -408,113 +346,5 @@ function createEmptyResult(): TranscriptionResult {
     },
     speakers: [],
     durationSeconds: 0,
-  }
-}
-
-// ============================================
-// Word Extraction
-// ============================================
-
-function extractAllWords(results: ISpeechRecognitionResult[]): WordWithMeta[] {
-  const words: WordWithMeta[] = []
-
-  for (const result of results) {
-    const alternatives = result.alternatives || []
-    if (alternatives.length === 0) continue
-
-    const alternative = alternatives[0]
-    const resultWords = alternative.words || []
-    const defaultConfidence = alternative.confidence || 0
-
-    for (const wordInfo of resultWords) {
-      const word = wordInfo.word || ''
-      if (!word.trim()) continue
-
-      words.push({
-        word: word.trim(),
-        start: durationToSeconds(wordInfo.startOffset),
-        end: durationToSeconds(wordInfo.endOffset),
-        confidence: wordInfo.confidence ?? defaultConfidence,
-        speakerTag: wordInfo.speakerLabel ? parseInt(wordInfo.speakerLabel, 10) || 0 : 0,
-      })
-    }
-  }
-
-  // Sort by start time
-  words.sort((a, b) => a.start - b.start)
-
-  return words
-}
-
-function durationToSeconds(duration: protos.google.protobuf.IDuration | null | undefined): number {
-  if (!duration) return 0
-
-  const seconds = Number(duration.seconds || 0)
-  const nanos = Number(duration.nanos || 0)
-
-  return seconds + nanos / 1e9
-}
-
-// ============================================
-// Segment Grouping
-// ============================================
-
-function groupWordsIntoSegments(words: WordWithMeta[]): TranscriptSegment[] {
-  if (words.length === 0) return []
-
-  const segments: TranscriptSegment[] = []
-  let currentSegmentWords: WordWithMeta[] = []
-  let currentSpeaker = words[0].speakerTag
-
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i]
-    const prevWord = i > 0 ? words[i - 1] : null
-
-    // Check if we should start a new segment
-    const speakerChanged = word.speakerTag !== currentSpeaker
-    const pauseDetected = prevWord !== null && (word.start - prevWord.end) > PAUSE_THRESHOLD_SECONDS
-
-    if (speakerChanged || pauseDetected) {
-      // Save current segment if it has words
-      if (currentSegmentWords.length > 0) {
-        segments.push(createSegment(currentSegmentWords, currentSpeaker))
-      }
-
-      // Start new segment
-      currentSegmentWords = []
-      currentSpeaker = word.speakerTag
-    }
-
-    currentSegmentWords.push(word)
-  }
-
-  // Don't forget the last segment
-  if (currentSegmentWords.length > 0) {
-    segments.push(createSegment(currentSegmentWords, currentSpeaker))
-  }
-
-  return segments
-}
-
-function createSegment(words: WordWithMeta[], speakerTag: number): TranscriptSegment {
-  const text = words.map(w => w.word).join(' ')
-  const start = words[0].start
-  const end = words[words.length - 1].end
-
-  // Calculate average confidence
-  const avgConfidence = words.reduce((sum, w) => sum + w.confidence, 0) / words.length
-
-  return {
-    speaker: `Speaker ${speakerTag}`,
-    start,
-    end,
-    text,
-    confidence: avgConfidence,
-    words: words.map(w => ({
-      word: w.word,
-      start: w.start,
-      end: w.end,
-      confidence: w.confidence,
-    })),
   }
 }
