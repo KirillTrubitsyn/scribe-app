@@ -12,6 +12,7 @@ import { SummaryView } from "@/components/recordings/summary-view";
 import { SpeakersView } from "@/components/recordings/speakers-view";
 import { DetailSidebar } from "@/components/recordings/detail-sidebar";
 import { ProcessingStatus } from "@/components/recordings/processing-status";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
 
@@ -284,27 +285,29 @@ export default function RecordingDetailPage({
 
             {/* Tab Content */}
             <div className="min-h-[400px]">
-              {activeTab === "transcript" && (
-                <TranscriptView
-                  transcript={transcript}
-                  speakers={recording.speakers}
-                  currentTime={currentTime}
-                  onSegmentClick={handleSegmentClick}
-                />
-              )}
+              <ErrorBoundary>
+                {activeTab === "transcript" && (
+                  <TranscriptView
+                    transcript={transcript}
+                    speakers={recording.speakers}
+                    currentTime={currentTime}
+                    onSegmentClick={handleSegmentClick}
+                  />
+                )}
 
-              {activeTab === "summary" && (
-                <SummaryView artifacts={recording.artifacts} />
-              )}
+                {activeTab === "summary" && (
+                  <SummaryView artifacts={recording.artifacts} />
+                )}
 
-              {activeTab === "speakers" && (
-                <SpeakersView
-                  speakers={recording.speakers}
-                  transcript={transcript}
-                  recordingId={recording.id}
-                  onSpeakerUpdate={handleSpeakerUpdate}
-                />
-              )}
+                {activeTab === "speakers" && (
+                  <SpeakersView
+                    speakers={recording.speakers}
+                    transcript={transcript}
+                    recordingId={recording.id}
+                    onSpeakerUpdate={handleSpeakerUpdate}
+                  />
+                )}
+              </ErrorBoundary>
             </div>
           </div>
 
