@@ -79,6 +79,11 @@ export async function processRecording(request: ProcessingRequest): Promise<void
 
     console.log(`[Processor] Transcription completed: ${transcriptionResult.transcript.word_count} words`)
 
+    // Validate that transcription produced actual content
+    if (transcriptionResult.transcript.word_count === 0 || !transcriptionResult.transcript.full_text) {
+      throw new Error('Транскрипция не дала результатов. Аудио может быть пустым, слишком коротким или не содержать распознаваемой речи.')
+    }
+
     // 3. Send webhook: transcription_completed
     console.log('[Processor] Step 3: Sending transcription_completed webhook')
     await sendTranscriptionCompleted(
