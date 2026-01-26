@@ -57,12 +57,17 @@ function getGoogleCredentials(): { projectId: string; credentials: object } {
   }
 }
 
+// Chirp 2 is only available in specific regions
+const CHIRP_LOCATION = 'us-central1'
+
 function getSpeechClient(): SpeechClientV2 {
   const { projectId, credentials } = getGoogleCredentials()
 
   return new SpeechClient({
     projectId,
     credentials,
+    // Use regional endpoint for Chirp 2 model
+    apiEndpoint: `${CHIRP_LOCATION}-speech.googleapis.com`,
   })
 }
 
@@ -76,8 +81,8 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
   const client = getSpeechClient()
   const { projectId } = getGoogleCredentials()
 
-  // Build recognizer path for v2 API
-  const recognizerPath = `projects/${projectId}/locations/global/recognizers/_`
+  // Build recognizer path for v2 API (using regional location for Chirp 2)
+  const recognizerPath = `projects/${projectId}/locations/${CHIRP_LOCATION}/recognizers/_`
 
   // Start Batch Recognition with Chirp
   console.log('[Transcription] Initiating batch recognition operation...')
