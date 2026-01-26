@@ -67,7 +67,7 @@ function getGeminiClient() {
   const genAI = new GoogleGenerativeAI(apiKey)
 
   return genAI.getGenerativeModel({
-    model: 'gemini-3-flash',
+    model: 'gemini-3-flash-preview',
     generationConfig: {
       temperature: 0.1,
       topP: 0.8,
