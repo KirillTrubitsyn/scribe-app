@@ -73,6 +73,9 @@ function getGeminiClient() {
       topP: 0.8,
       topK: 40,
       maxOutputTokens: 65536,
+      thinkingConfig: {
+        thinkingBudget: 'low',
+      },
     },
   })
 }
