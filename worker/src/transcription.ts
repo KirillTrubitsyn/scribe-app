@@ -291,12 +291,18 @@ function processChirpResponse(
   response: IBatchRecognizeResponse,
   gcsUri: string
 ): TranscriptionResult {
+  // Debug: log full response structure
+  console.log('[Transcription] Response keys:', Object.keys(response))
+
   // Get results for our file
   const results = response.results || {}
+  console.log('[Transcription] Results keys:', Object.keys(results))
+
   const fileResult = results[gcsUri] as IBatchRecognizeFileResult | undefined
 
   if (!fileResult) {
-    console.log('[Transcription] No file result found for URI')
+    console.log('[Transcription] No file result found for URI:', gcsUri)
+    console.log('[Transcription] Available URIs:', Object.keys(results))
     return createEmptyResult()
   }
 
@@ -312,8 +318,17 @@ function processChirpResponse(
     throw new Error(parsed.userMessage)
   }
 
+  // Debug: log file result structure
+  console.log('[Transcription] File result keys:', Object.keys(fileResult))
+
   // Get transcript results from the file result
   const transcriptData = fileResult.transcript
+  console.log('[Transcription] Transcript data:', transcriptData ? 'exists' : 'null/undefined')
+
+  if (transcriptData) {
+    console.log('[Transcription] Transcript results count:', transcriptData.results?.length || 0)
+  }
+
   if (!transcriptData || !transcriptData.results || transcriptData.results.length === 0) {
     console.log('[Transcription] Empty transcript results')
     return createEmptyResult()
