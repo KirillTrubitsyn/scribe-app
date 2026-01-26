@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, FileText, Sparkles, Users } from "lucide-react";
+import { Loader2, FileText, Sparkles, Users, MessageSquare, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { DetailHeader } from "@/components/recordings/detail-header";
@@ -10,6 +10,8 @@ import { AudioPlayer, AudioPlayerPlaceholder } from "@/components/recordings/aud
 import { TranscriptView } from "@/components/recordings/transcript-view";
 import { SummaryView } from "@/components/recordings/summary-view";
 import { SpeakersView } from "@/components/recordings/speakers-view";
+import { AIChat } from "@/components/recordings/ai-chat";
+import { ProtocolView } from "@/components/recordings/protocol-view";
 import { DetailSidebar } from "@/components/recordings/detail-sidebar";
 import { ProcessingStatus } from "@/components/recordings/processing-status";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -23,11 +25,13 @@ type RecordingWithData = Recording & {
   speakers: Speaker[];
 };
 
-type TabValue = "transcript" | "summary" | "speakers";
+type TabValue = "transcript" | "summary" | "protocol" | "chat" | "speakers";
 
 const TABS: { value: TabValue; label: string; icon: React.ReactNode }[] = [
   { value: "transcript", label: "Транскрипт", icon: <FileText className="w-4 h-4" /> },
   { value: "summary", label: "Резюме", icon: <Sparkles className="w-4 h-4" /> },
+  { value: "protocol", label: "Протокол", icon: <ClipboardList className="w-4 h-4" /> },
+  { value: "chat", label: "Чат с ИИ", icon: <MessageSquare className="w-4 h-4" /> },
   { value: "speakers", label: "Участники", icon: <Users className="w-4 h-4" /> },
 ];
 
@@ -346,6 +350,21 @@ export default function RecordingDetailPage({
 
                 {activeTab === "summary" && (
                   <SummaryView artifacts={recording.artifacts ?? []} />
+                )}
+
+                {activeTab === "protocol" && (
+                  <ProtocolView
+                    recordingId={recording.id}
+                    artifacts={recording.artifacts ?? []}
+                    hasTranscript={!!transcript}
+                  />
+                )}
+
+                {activeTab === "chat" && (
+                  <AIChat
+                    recordingId={recording.id}
+                    hasTranscript={!!transcript}
+                  />
                 )}
 
                 {activeTab === "speakers" && (
