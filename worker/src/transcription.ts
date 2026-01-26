@@ -39,6 +39,99 @@ const PAUSE_THRESHOLD_SECONDS = 2.0
 const POLL_INTERVAL_MS = 10000 // 10 seconds
 const MAX_POLL_TIME_MS = 60 * 60 * 1000 // 1 hour for long recordings
 
+// ============================================
+// Error Message Parsing
+// ============================================
+
+interface ParsedError {
+  userMessage: string
+  technicalDetails: string
+  errorType: 'permission' | 'not_found' | 'invalid_audio' | 'quota' | 'timeout' | 'unknown'
+}
+
+/**
+ * Parse GCP error messages and return user-friendly versions
+ */
+function parseTranscriptionError(rawError: string): ParsedError {
+  const lowerError = rawError.toLowerCase()
+
+  // Permission/access denied errors
+  if (
+    lowerError.includes('does not have') &&
+    (lowerError.includes('permission') || lowerError.includes('access'))
+  ) {
+    return {
+      userMessage: 'Не удалось получить доступ к аудиофайлу. Пожалуйста, попробуйте загрузить файл заново.',
+      technicalDetails: rawError,
+      errorType: 'permission',
+    }
+  }
+
+  if (lowerError.includes('storage.objects.get') || lowerError.includes('denied on resource')) {
+    return {
+      userMessage: 'Ошибка доступа к файлу в хранилище. Пожалуйста, попробуйте загрузить файл заново.',
+      technicalDetails: rawError,
+      errorType: 'permission',
+    }
+  }
+
+  // File not found errors
+  if (
+    lowerError.includes('not found') ||
+    lowerError.includes('does not exist') ||
+    lowerError.includes('no such object')
+  ) {
+    return {
+      userMessage: 'Аудиофайл не найден. Возможно, он был удален. Пожалуйста, загрузите файл заново.',
+      technicalDetails: rawError,
+      errorType: 'not_found',
+    }
+  }
+
+  // Invalid audio format errors
+  if (
+    lowerError.includes('invalid audio') ||
+    lowerError.includes('unsupported format') ||
+    lowerError.includes('audio encoding') ||
+    lowerError.includes('could not decode')
+  ) {
+    return {
+      userMessage: 'Формат аудиофайла не поддерживается. Пожалуйста, используйте MP3, WAV, M4A или WebM.',
+      technicalDetails: rawError,
+      errorType: 'invalid_audio',
+    }
+  }
+
+  // Quota/rate limit errors
+  if (
+    lowerError.includes('quota') ||
+    lowerError.includes('rate limit') ||
+    lowerError.includes('resource exhausted')
+  ) {
+    return {
+      userMessage: 'Сервис временно перегружен. Пожалуйста, попробуйте через несколько минут.',
+      technicalDetails: rawError,
+      errorType: 'quota',
+    }
+  }
+
+  // Timeout errors
+  if (lowerError.includes('timeout') || lowerError.includes('deadline exceeded')) {
+    return {
+      userMessage: 'Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.',
+      technicalDetails: rawError,
+      errorType: 'timeout',
+    }
+  }
+
+  // Default: unknown error
+  return {
+    userMessage: 'Произошла ошибка при обработке аудио. Пожалуйста, попробуйте еще раз.',
+    technicalDetails: rawError,
+    errorType: 'unknown',
+  }
+}
+
 function getGoogleCredentials(): { projectId: string; credentials: object } {
   const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
 
@@ -78,49 +171,72 @@ function getSpeechClient(): SpeechClientV2 {
 export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResult> {
   console.log(`[Transcription] Starting Chirp batch transcription for ${gcsUri}`)
 
-  const client = getSpeechClient()
-  const { projectId } = getGoogleCredentials()
+  try {
+    const client = getSpeechClient()
+    const { projectId } = getGoogleCredentials()
 
-  // Build recognizer path for v2 API (using regional location for Chirp 2)
-  const recognizerPath = `projects/${projectId}/locations/${CHIRP_LOCATION}/recognizers/_`
+    // Build recognizer path for v2 API (using regional location for Chirp 2)
+    const recognizerPath = `projects/${projectId}/locations/${CHIRP_LOCATION}/recognizers/_`
 
-  // Start Batch Recognition with Chirp
-  console.log('[Transcription] Initiating batch recognition operation...')
+    // Start Batch Recognition with Chirp
+    console.log('[Transcription] Initiating batch recognition operation...')
 
-  const [operation] = await client.batchRecognize({
-    recognizer: recognizerPath,
-    config: {
-      // Auto-detect audio encoding
-      autoDecodingConfig: {},
-      // Language codes with Russian primary, English fallback
-      languageCodes: ['ru-RU', 'en-US'],
-      // Chirp 2 model for best quality
-      model: 'chirp_2',
-      features: {
-        // Enable word-level timestamps
-        enableWordTimeOffsets: true,
-        // Note: Chirp 2 doesn't support:
-        // - enableAutomaticPunctuation (auto-included)
-        // - enableWordConfidence (not available)
-        // - diarizationConfig (not supported for this model)
+    const [operation] = await client.batchRecognize({
+      recognizer: recognizerPath,
+      config: {
+        // Auto-detect audio encoding
+        autoDecodingConfig: {},
+        // Language codes with Russian primary, English fallback
+        languageCodes: ['ru-RU', 'en-US'],
+        // Chirp 2 model for best quality
+        model: 'chirp_2',
+        features: {
+          // Enable word-level timestamps
+          enableWordTimeOffsets: true,
+          // Note: Chirp 2 doesn't support:
+          // - enableAutomaticPunctuation (auto-included)
+          // - enableWordConfidence (not available)
+          // - diarizationConfig (not supported for this model)
+        },
       },
-    },
-    files: [{ uri: gcsUri }],
-    recognitionOutputConfig: {
-      // Return results inline (not to GCS)
-      inlineResponseConfig: {},
-    },
-  })
+      files: [{ uri: gcsUri }],
+      recognitionOutputConfig: {
+        // Return results inline (not to GCS)
+        inlineResponseConfig: {},
+      },
+    })
 
-  const operationName = operation.name
-  console.log(`[Transcription] Operation started: ${operationName}`)
+    const operationName = operation.name
+    console.log(`[Transcription] Operation started: ${operationName}`)
 
-  // Poll for completion
-  const response = await pollOperation(operation)
+    // Poll for completion
+    const response = await pollOperation(operation)
 
-  // Parse and return results
-  console.log('[Transcription] Processing results...')
-  return processChirpResponse(response, gcsUri)
+    // Parse and return results
+    console.log('[Transcription] Processing results...')
+    return processChirpResponse(response, gcsUri)
+  } catch (error) {
+    // Handle errors from the API call itself
+    const rawError = error instanceof Error ? error.message : String(error)
+    console.error('[Transcription] API error:', rawError)
+
+    // Check if the error is already user-friendly (from processChirpResponse)
+    // by checking if it doesn't contain typical GCP technical markers
+    const isAlreadyUserFriendly =
+      !rawError.includes('@') &&
+      !rawError.includes('gserviceaccount.com') &&
+      !rawError.includes('storage.objects') &&
+      !rawError.includes('gs://')
+
+    if (isAlreadyUserFriendly) {
+      throw error
+    }
+
+    // Parse and convert to user-friendly message
+    const parsed = parseTranscriptionError(rawError)
+    console.error('[Transcription] Error type:', parsed.errorType)
+    throw new Error(parsed.userMessage)
+  }
 }
 
 // ============================================
@@ -146,7 +262,9 @@ async function pollOperation(
     // Check timeout
     const elapsed = Date.now() - startTime
     if (elapsed > MAX_POLL_TIME_MS) {
-      throw new Error(`Transcription timeout after ${Math.round(elapsed / 60000)} minutes`)
+      const minutes = Math.round(elapsed / 60000)
+      console.error(`[Transcription] Timeout after ${minutes} minutes`)
+      throw new Error('Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.')
     }
 
     // Log progress periodically (every 30 seconds)
@@ -184,8 +302,14 @@ function processChirpResponse(
 
   // Check for errors
   if (fileResult.error) {
-    console.error('[Transcription] Error in file result:', fileResult.error.message)
-    throw new Error(`Transcription failed: ${fileResult.error.message}`)
+    const rawError = fileResult.error.message || 'Unknown transcription error'
+    const parsed = parseTranscriptionError(rawError)
+
+    console.error('[Transcription] Error in file result:', rawError)
+    console.error('[Transcription] Error type:', parsed.errorType)
+
+    // Throw user-friendly message but include technical details in a structured way
+    throw new Error(parsed.userMessage)
   }
 
   // Get transcript results from the file result
