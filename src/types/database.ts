@@ -138,9 +138,16 @@ export type SpeakerInsert = Omit<Speaker, 'id'> & {
   id?: string
 }
 
-export type ProcessingJobInsert = Omit<ProcessingJob, 'id' | 'created_at'> & {
+export type ProcessingJobInsert = Omit<
+  ProcessingJob,
+  'id' | 'created_at' | 'completed_at' | 'error_message' | 'google_operation_name' | 'started_at'
+> & {
   id?: string
   created_at?: string
+  completed_at?: string | null
+  error_message?: string | null
+  google_operation_name?: string | null
+  started_at?: string | null
 }
 
 // ============================================
