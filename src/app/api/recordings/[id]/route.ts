@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { generateDownloadSignedUrl, deleteFile } from "@/lib/google/storage";
 import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
 
@@ -15,9 +15,9 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
 
-    // Get the recording with related data
+    // Use admin client to bypass RLS (development mode)
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from("recordings")
       .select(`
