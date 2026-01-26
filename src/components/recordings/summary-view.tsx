@@ -41,6 +41,20 @@ export function SummaryView({ artifacts }: SummaryViewProps) {
   const summaryArtifact = artifacts.find((a) => a.type === "summary");
   const actionItemsArtifact = artifacts.find((a) => a.type === "action_items");
 
+  // Safely convert a value to string
+  const ensureString = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (value === null || value === undefined) return "";
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value, null, 2);
+      } catch {
+        return String(value);
+      }
+    }
+    return String(value);
+  };
+
   // Parse summary content (handles both plain text and JSON)
   const parsedSummary = useMemo((): ParsedSummary | null => {
     if (!summaryArtifact) return null;
@@ -48,7 +62,17 @@ export function SummaryView({ artifacts }: SummaryViewProps) {
     try {
       // Try to parse as JSON first
       const parsed = JSON.parse(summaryArtifact.content);
-      return parsed as ParsedSummary;
+
+      // Ensure summary is always a string
+      const summary = ensureString(parsed.summary || parsed.text || parsed);
+
+      return {
+        summary,
+        keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.map(ensureString) : undefined,
+        decisions: Array.isArray(parsed.decisions) ? parsed.decisions : undefined,
+        actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : undefined,
+        topics: Array.isArray(parsed.topics) ? parsed.topics.map(ensureString) : undefined,
+      };
     } catch {
       // If not JSON, treat as plain text summary
       return {
