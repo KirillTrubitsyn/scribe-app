@@ -18,6 +18,8 @@ export async function GET(
 
     // Use admin client to bypass RLS (development mode)
     const supabase = createAdminClient();
+
+    // Query recording with related data
     const { data, error } = await supabase
       .from("recordings")
       .select(`
@@ -37,12 +39,42 @@ export async function GET(
       );
     }
 
-    const recording = data as unknown as RecordingWithRelations;
+    // Debug: Log raw response to understand data structure
+    console.log("[API /recordings/:id] Raw data keys:", Object.keys(data));
+    console.log("[API /recordings/:id] Raw transcripts value:", JSON.stringify(data.transcripts));
+
+    let recording = data as unknown as RecordingWithRelations;
 
     // Debug logging for transcription display issue
     console.log("[API /recordings/:id] Recording ID:", recording.id);
     console.log("[API /recordings/:id] Recording status:", recording.status);
-    console.log("[API /recordings/:id] Transcripts count:", recording.transcripts?.length ?? 0);
+    console.log("[API /recordings/:id] Transcripts count from join:", recording.transcripts?.length ?? 0);
+
+    // If join returned no transcripts, try direct query as fallback
+    if (!recording.transcripts || recording.transcripts.length === 0) {
+      console.log("[API /recordings/:id] Join returned no transcripts, trying direct query...");
+
+      const { data: directTranscripts, error: transcriptError } = await supabase
+        .from("transcripts")
+        .select("*")
+        .eq("recording_id", id);
+
+      console.log("[API /recordings/:id] Direct query result:", {
+        error: transcriptError,
+        count: directTranscripts?.length ?? 0,
+        data: directTranscripts ? JSON.stringify(directTranscripts.map(t => ({ id: t.id, recording_id: t.recording_id, word_count: t.word_count }))) : null
+      });
+
+      // Use direct query results if available
+      if (directTranscripts && directTranscripts.length > 0) {
+        recording = {
+          ...recording,
+          transcripts: directTranscripts as Transcript[],
+        };
+        console.log("[API /recordings/:id] Using transcripts from direct query");
+      }
+    }
+
     if (recording.transcripts?.[0]) {
       const t = recording.transcripts[0];
       console.log("[API /recordings/:id] Transcript ID:", t.id);
