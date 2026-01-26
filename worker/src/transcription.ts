@@ -322,19 +322,21 @@ function processChirpResponse(
   console.log('[Transcription] File result keys:', Object.keys(fileResult))
 
   // Get transcript results from the file result
-  const transcriptData = fileResult.transcript
-  console.log('[Transcription] Transcript data:', transcriptData ? 'exists' : 'null/undefined')
+  // When using inlineResponseConfig, results are in inlineResult, not transcript
+  // transcript field is only populated when using GCS output
+  const inlineResult = fileResult.inlineResult
+  console.log('[Transcription] Inline result:', inlineResult ? 'exists' : 'null/undefined')
 
-  if (transcriptData) {
-    console.log('[Transcription] Transcript results count:', transcriptData.results?.length || 0)
+  if (inlineResult) {
+    console.log('[Transcription] Inline result results count:', inlineResult.results?.length || 0)
   }
 
-  if (!transcriptData || !transcriptData.results || transcriptData.results.length === 0) {
-    console.log('[Transcription] Empty transcript results')
+  if (!inlineResult || !inlineResult.results || inlineResult.results.length === 0) {
+    console.log('[Transcription] Empty inline results')
     return createEmptyResult()
   }
 
-  const transcriptResults = transcriptData.results
+  const transcriptResults = inlineResult.results
 
   // Extract all words with metadata
   const allWords = extractAllWords(transcriptResults)
