@@ -64,7 +64,13 @@ export default function RecordingDetailPage({
           throw new Error("Recording not found");
         }
         const data = await response.json();
-        setRecording(data);
+        // Normalize data to ensure arrays are never null
+        setRecording({
+          ...data,
+          transcripts: data.transcripts || [],
+          artifacts: data.artifacts || [],
+          speakers: data.speakers || [],
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load recording");
       } finally {
@@ -86,7 +92,13 @@ export default function RecordingDetailPage({
         const response = await fetch(`/api/recordings/${recordingId}`);
         if (response.ok) {
           const data = await response.json();
-          setRecording(data);
+          // Normalize data to ensure arrays are never null
+          setRecording({
+            ...data,
+            transcripts: data.transcripts || [],
+            artifacts: data.artifacts || [],
+            speakers: data.speakers || [],
+          });
         }
       } catch {
         // Ignore polling errors
@@ -175,7 +187,13 @@ export default function RecordingDetailPage({
       const refreshResponse = await fetch(`/api/recordings/${recordingId}`);
       if (refreshResponse.ok) {
         const data = await refreshResponse.json();
-        setRecording(data);
+        // Normalize data to ensure arrays are never null
+        setRecording({
+          ...data,
+          transcripts: data.transcripts || [],
+          artifacts: data.artifacts || [],
+          speakers: data.speakers || [],
+        });
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Не удалось запустить обработку");
@@ -215,7 +233,7 @@ export default function RecordingDetailPage({
   if (recording.status !== "ready" && recording.status !== "error") {
     return (
       <div className="p-8 max-w-4xl mx-auto">
-        <DetailHeader recording={recording} speakers={recording.speakers} />
+        <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
         <div className="mt-8">
           <ProcessingStatus status={recording.status} />
         </div>
@@ -227,7 +245,7 @@ export default function RecordingDetailPage({
   if (recording.status === "error") {
     return (
       <div className="p-8 max-w-4xl mx-auto">
-        <DetailHeader recording={recording} speakers={recording.speakers} />
+        <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
         <div className="mt-8">
           <ProcessingStatus
             status={recording.status}
@@ -239,13 +257,13 @@ export default function RecordingDetailPage({
     );
   }
 
-  const transcript = recording.transcripts[0] || null;
+  const transcript = recording.transcripts?.[0] ?? null;
 
   return (
     <div className="p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <DetailHeader recording={recording} speakers={recording.speakers} />
+        <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
 
         {/* Main content with sidebar */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
@@ -289,19 +307,19 @@ export default function RecordingDetailPage({
                 {activeTab === "transcript" && (
                   <TranscriptView
                     transcript={transcript}
-                    speakers={recording.speakers}
+                    speakers={recording.speakers ?? []}
                     currentTime={currentTime}
                     onSegmentClick={handleSegmentClick}
                   />
                 )}
 
                 {activeTab === "summary" && (
-                  <SummaryView artifacts={recording.artifacts} />
+                  <SummaryView artifacts={recording.artifacts ?? []} />
                 )}
 
                 {activeTab === "speakers" && (
                   <SpeakersView
-                    speakers={recording.speakers}
+                    speakers={recording.speakers ?? []}
                     transcript={transcript}
                     recordingId={recording.id}
                     onSpeakerUpdate={handleSpeakerUpdate}
@@ -316,7 +334,7 @@ export default function RecordingDetailPage({
             <DetailSidebar
               recording={recording}
               transcript={transcript}
-              artifacts={recording.artifacts}
+              artifacts={recording.artifacts ?? []}
               onDownloadAudio={handleDownloadAudio}
               onDownloadDocx={handleDownloadDocx}
               onDelete={handleDelete}
