@@ -19,63 +19,42 @@ export async function GET(
     // Use admin client to bypass RLS (development mode)
     const supabase = createAdminClient();
 
-    // Query recording with related data
-    const { data, error } = await supabase
+    // Query recording first
+    const { data: recordingData, error: recordingError } = await supabase
       .from("recordings")
-      .select(`
-        *,
-        transcripts(*),
-        artifacts(*),
-        speakers(*)
-      `)
+      .select("*")
       .eq("id", id)
       .single();
 
-    if (error || !data) {
-      console.error("[API /recordings/:id] Error fetching recording:", error);
+    if (recordingError || !recordingData) {
+      console.error("[API /recordings/:id] Error fetching recording:", recordingError);
       return NextResponse.json(
         { error: "Recording not found" },
         { status: 404 }
       );
     }
 
-    // Debug: Log raw response to understand data structure
-    console.log("[API /recordings/:id] Raw data keys:", Object.keys(data));
-    console.log("[API /recordings/:id] Raw transcripts value:", JSON.stringify(data.transcripts));
+    // Fetch related data with separate queries for reliability
+    // This avoids potential issues with PostgREST FK detection
+    const [transcriptsResult, artifactsResult, speakersResult] = await Promise.all([
+      supabase.from("transcripts").select("*").eq("recording_id", id),
+      supabase.from("artifacts").select("*").eq("recording_id", id),
+      supabase.from("speakers").select("*").eq("recording_id", id),
+    ]);
 
-    let recording = data as unknown as RecordingWithRelations;
+    const recording: RecordingWithRelations = {
+      ...(recordingData as Recording),
+      transcripts: (transcriptsResult.data ?? []) as Transcript[],
+      artifacts: (artifactsResult.data ?? []) as Artifact[],
+      speakers: (speakersResult.data ?? []) as Speaker[],
+    };
 
-    // Debug logging for transcription display issue
+    // Debug logging
     console.log("[API /recordings/:id] Recording ID:", recording.id);
     console.log("[API /recordings/:id] Recording status:", recording.status);
-    console.log("[API /recordings/:id] Transcripts count from join:", recording.transcripts?.length ?? 0);
+    console.log("[API /recordings/:id] Transcripts count:", recording.transcripts.length);
 
-    // If join returned no transcripts, try direct query as fallback
-    if (!recording.transcripts || recording.transcripts.length === 0) {
-      console.log("[API /recordings/:id] Join returned no transcripts, trying direct query...");
-
-      const { data: directTranscripts, error: transcriptError } = await supabase
-        .from("transcripts")
-        .select("*")
-        .eq("recording_id", id);
-
-      console.log("[API /recordings/:id] Direct query result:", {
-        error: transcriptError,
-        count: directTranscripts?.length ?? 0,
-        data: directTranscripts ? JSON.stringify(directTranscripts.map(t => ({ id: t.id, recording_id: t.recording_id, word_count: t.word_count }))) : null
-      });
-
-      // Use direct query results if available
-      if (directTranscripts && directTranscripts.length > 0) {
-        recording = {
-          ...recording,
-          transcripts: directTranscripts as Transcript[],
-        };
-        console.log("[API /recordings/:id] Using transcripts from direct query");
-      }
-    }
-
-    if (recording.transcripts?.[0]) {
+    if (recording.transcripts[0]) {
       const t = recording.transcripts[0];
       console.log("[API /recordings/:id] Transcript ID:", t.id);
       console.log("[API /recordings/:id] Transcript full_text length:", t.full_text?.length ?? 0);
