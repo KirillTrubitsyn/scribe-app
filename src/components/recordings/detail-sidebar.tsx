@@ -25,6 +25,7 @@ interface DetailSidebarProps {
   onDelete: () => void;
   onAIAnalysis?: () => void;
   isDeleting?: boolean;
+  isAnalyzing?: boolean;
 }
 
 export function DetailSidebar({
@@ -36,6 +37,7 @@ export function DetailSidebar({
   onDelete,
   onAIAnalysis,
   isDeleting = false,
+  isAnalyzing = false,
 }: DetailSidebarProps) {
   const hasSummary = artifacts.some((a) => a.type === "summary");
   const hasTranscript = transcript && transcript.segments?.length > 0;
@@ -118,10 +120,17 @@ export function DetailSidebar({
           </p>
           <SidebarButton
             onClick={onAIAnalysis}
-            icon={<Sparkles className="w-4 h-4" />}
+            icon={
+              isAnalyzing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )
+            }
             variant="primary"
+            disabled={isAnalyzing}
           >
-            Запустить анализ
+            {isAnalyzing ? "Анализируем..." : "Запустить анализ"}
           </SidebarButton>
         </div>
       )}

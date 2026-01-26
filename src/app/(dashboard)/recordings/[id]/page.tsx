@@ -161,9 +161,40 @@ export default function RecordingDetailPage({
     }
   };
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
   const handleAIAnalysis = async () => {
-    // TODO: Implement AI analysis trigger
-    alert("AI-анализ будет запущен");
+    if (!recordingId || isAnalyzing) return;
+
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/analyze`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to start analysis");
+      }
+
+      // Refresh recording data to show new artifacts
+      const refreshResponse = await fetch(`/api/recordings/${recordingId}`);
+      if (refreshResponse.ok) {
+        const data = await refreshResponse.json();
+        setRecording({
+          ...data,
+          transcripts: data.transcripts || [],
+          artifacts: data.artifacts || [],
+          speakers: data.speakers || [],
+        });
+        // Switch to summary tab to show results
+        setActiveTab("summary");
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось запустить AI-анализ");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const handleRetryProcessing = async () => {
@@ -340,6 +371,7 @@ export default function RecordingDetailPage({
               onDelete={handleDelete}
               onAIAnalysis={handleAIAnalysis}
               isDeleting={isDeleting}
+              isAnalyzing={isAnalyzing}
             />
           </aside>
         </div>
