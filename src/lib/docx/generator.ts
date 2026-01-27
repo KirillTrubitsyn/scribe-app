@@ -86,30 +86,9 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Generate title based on content analysis
-function generateTitle(text: string): string {
-  const textLower = text.toLowerCase().slice(0, 2000);
-
-  const courtKeywords = ["суд", "судь", "истец", "ответчик", "заседани", "иск", "решени суда", "апелляци", "кассаци", "прокурор", "адвокат", "подсудим"];
-  const meetingKeywords = ["совещани", "протокол", "повестка", "присутствовал", "слушали", "постановили", "решили", "собрани"];
-  const negotiationKeywords = ["переговор", "договорил", "предложени", "условия сделк", "контракт", "соглашени"];
-  const interviewKeywords = ["интервью", "вопрос:", "ответ:", "корреспондент", "журналист"];
-  const lectureKeywords = ["лекци", "тема занятия", "студент", "преподаватель", "семинар"];
-
-  const scores = {
-    "ТРАНСКРИПЦИЯ СУДЕБНОГО ЗАСЕДАНИЯ": courtKeywords.filter(kw => textLower.includes(kw)).length,
-    "ПРОТОКОЛ СОВЕЩАНИЯ": meetingKeywords.filter(kw => textLower.includes(kw)).length,
-    "ТРАНСКРИПЦИЯ ПЕРЕГОВОРОВ": negotiationKeywords.filter(kw => textLower.includes(kw)).length,
-    "ТРАНСКРИПЦИЯ ИНТЕРВЬЮ": interviewKeywords.filter(kw => textLower.includes(kw)).length,
-    "ТРАНСКРИПЦИЯ ЛЕКЦИИ": lectureKeywords.filter(kw => textLower.includes(kw)).length,
-  };
-
-  const [bestTitle, bestScore] = Object.entries(scores).reduce(
-    (max, [title, score]) => (score > max[1] ? [title, score] : max),
-    ["ТРАНСКРИПЦИЯ АУДИОЗАПИСИ", 0]
-  );
-
-  return bestScore >= 2 ? bestTitle : "ТРАНСКРИПЦИЯ АУДИОЗАПИСИ";
+// Generate title - always use generic title for transcript export
+function generateTitle(): string {
+  return "ТРАНСКРИПЦИЯ АУДИОЗАПИСИ";
 }
 
 // Get speaker name from speakers list
@@ -825,10 +804,8 @@ export async function generateRecordingDocx(
 ): Promise<Buffer> {
   const children: Paragraph[] = [];
 
-  // Generate title based on content
-  const title = transcript?.full_text
-    ? generateTitle(transcript.full_text)
-    : "ТРАНСКРИПЦИЯ АУДИОЗАПИСИ";
+  // Generate title
+  const title = generateTitle();
 
   // Header
   children.push(...createHeader(title, recording));
@@ -969,9 +946,7 @@ export async function generateTranscriptDocx(
   const children: Paragraph[] = [];
 
   // Title
-  const title = transcript?.full_text
-    ? generateTitle(transcript.full_text)
-    : "ТРАНСКРИПЦИЯ АУДИОЗАПИСИ";
+  const title = generateTitle();
 
   children.push(...createHeader(title, recording));
   children.push(...createMetadataSection(recording, transcript, speakers));
