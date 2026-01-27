@@ -417,6 +417,8 @@ export default function RecordingDetailPage({
                     artifacts={recording.artifacts ?? []}
                     recordingId={recording.id}
                     onUpdate={refreshRecording}
+                    onAIAnalysis={handleAIAnalysis}
+                    isAnalyzing={isAnalyzing}
                   />
                 )}
 

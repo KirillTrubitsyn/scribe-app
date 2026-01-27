@@ -2,18 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Upload,
-  Wand2,
-  FileText,
-  Sparkles,
-  CheckCircle2,
-  XCircle,
-  RefreshCw,
-  Loader2,
-  ArrowLeft,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { XCircle, RefreshCw, ArrowLeft } from "lucide-react";
 import { TranscriptionSpinner } from "@/components/ui/audio-spinner";
 import type { RecordingStatus } from "@/types/database";
 
@@ -23,53 +12,14 @@ interface ProcessingStatusProps {
   onRetry?: () => void;
 }
 
-const PROCESSING_STEPS = [
-  {
-    status: "uploading" as const,
-    label: "Загрузка файла",
-    icon: Upload,
-    description: "Файл загружается на сервер",
-  },
-  {
-    status: "uploaded" as const,
-    label: "Файл загружен",
-    icon: CheckCircle2,
-    description: "Подготовка к обработке",
-  },
-  {
-    status: "processing" as const,
-    label: "Обработка аудио",
-    icon: Wand2,
-    description: "Подготовка аудио для транскрибации",
-  },
-  {
-    status: "transcribing" as const,
-    label: "Транскрибация",
-    icon: FileText,
-    description: "Распознавание речи и создание транскрипта",
-  },
-  {
-    status: "analyzing" as const,
-    label: "AI-анализ",
-    icon: Sparkles,
-    description: "Создание резюме и выделение ключевых моментов",
-  },
-  {
-    status: "ready" as const,
-    label: "Готово",
-    icon: CheckCircle2,
-    description: "Запись полностью обработана",
-  },
-];
-
-const STATUS_ORDER: Record<RecordingStatus, number> = {
-  uploading: 0,
-  uploaded: 1,
-  processing: 2,
-  transcribing: 3,
-  analyzing: 4,
-  ready: 5,
-  error: -1,
+const STATUS_LABELS: Record<RecordingStatus, { label: string; description: string }> = {
+  uploading: { label: "Загрузка файла", description: "Файл загружается на сервер" },
+  uploaded: { label: "Файл загружен", description: "Подготовка к обработке" },
+  processing: { label: "Обработка аудио", description: "Подготовка аудио для транскрибации" },
+  transcribing: { label: "Транскрибация", description: "Распознавание речи и создание транскрипта" },
+  analyzing: { label: "AI-анализ", description: "Создание резюме и выделение ключевых моментов" },
+  ready: { label: "Готово", description: "Запись полностью обработана" },
+  error: { label: "Ошибка", description: "Произошла ошибка при обработке" },
 };
 
 export function ProcessingStatus({
@@ -89,8 +39,6 @@ export function ProcessingStatus({
 
     return () => clearInterval(interval);
   }, [status]);
-
-  const currentStepIndex = STATUS_ORDER[status];
 
   if (status === "error") {
     return (
@@ -139,73 +87,13 @@ export function ProcessingStatus({
 
       {/* Current status */}
       <h2 className="text-2xl font-bold text-white mb-2">
-        {PROCESSING_STEPS.find((s) => s.status === status)?.label || "Обработка"}
+        {STATUS_LABELS[status]?.label || "Обработка"}
         {dots}
       </h2>
 
-      <p className="text-slate-400 text-center max-w-md mb-8">
-        {PROCESSING_STEPS.find((s) => s.status === status)?.description}
+      <p className="text-slate-400 text-center max-w-md">
+        {STATUS_LABELS[status]?.description}
       </p>
-
-      {/* Progress steps */}
-      <div className="w-full max-w-md">
-        <div className="space-y-3">
-          {PROCESSING_STEPS.filter((s) => s.status !== "ready").map(
-            (step, index) => {
-              const isCompleted = currentStepIndex > index;
-              const isCurrent = STATUS_ORDER[status] === index;
-              const StepIcon = step.icon;
-
-              return (
-                <div
-                  key={step.status}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-lg transition-colors",
-                    isCompleted && "bg-emerald-500/10",
-                    isCurrent && "bg-orange-500/10",
-                    !isCompleted && !isCurrent && "bg-slate-800/30"
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                      isCompleted && "bg-emerald-500/20",
-                      isCurrent && "bg-orange-500/20",
-                      !isCompleted && !isCurrent && "bg-slate-700/50"
-                    )}
-                  >
-                    {isCompleted ? (
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                    ) : isCurrent ? (
-                      <Loader2 className="w-4 h-4 text-orange-500 animate-spin" />
-                    ) : (
-                      <StepIcon className="w-4 h-4 text-slate-500" />
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={cn(
-                        "text-sm font-medium",
-                        isCompleted && "text-emerald-400",
-                        isCurrent && "text-orange-400",
-                        !isCompleted && !isCurrent && "text-slate-500"
-                      )}
-                    >
-                      {step.label}
-                    </p>
-                  </div>
-
-                  {isCompleted && (
-                    <span className="text-xs text-emerald-500">Готово</span>
-                  )}
-                </div>
-              );
-            }
-          )}
-        </div>
-      </div>
-
     </div>
   );
 }

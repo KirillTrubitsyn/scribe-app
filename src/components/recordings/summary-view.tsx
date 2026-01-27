@@ -21,6 +21,8 @@ interface SummaryViewProps {
   artifacts: Artifact[];
   recordingId?: string;
   onUpdate?: () => void;
+  onAIAnalysis?: () => void;
+  isAnalyzing?: boolean;
 }
 
 // Types for parsed artifact content
@@ -44,7 +46,7 @@ interface ParsedSummary {
   topics?: string[];
 }
 
-export function SummaryView({ artifacts, recordingId, onUpdate }: SummaryViewProps) {
+export function SummaryView({ artifacts, recordingId, onUpdate, onAIAnalysis, isAnalyzing = false }: SummaryViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [isExporting, setIsExporting] = useState(false);
@@ -239,12 +241,23 @@ export function SummaryView({ artifacts, recordingId, onUpdate }: SummaryViewPro
 
   if (!summaryArtifact && !actionItemsArtifact) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-        <Sparkles className="w-12 h-12 mb-4 opacity-50" />
-        <p>AI-анализ пока недоступен</p>
-        <p className="text-sm mt-1">
-          Он появится после завершения обработки записи
-        </p>
+      <div className="flex flex-col items-center justify-center py-16">
+        <Sparkles className="w-12 h-12 mb-4 text-slate-500" />
+        <p className="text-slate-300 mb-4">Саммари ещё не создано</p>
+        {onAIAnalysis && (
+          <button
+            onClick={onAIAnalysis}
+            disabled={isAnalyzing}
+            className="px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAnalyzing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Sparkles className="w-5 h-5" />
+            )}
+            {isAnalyzing ? "Анализируем..." : "Создать саммари"}
+          </button>
+        )}
       </div>
     );
   }
