@@ -177,7 +177,7 @@ export function AIChat({
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-800/30 rounded-xl border border-slate-700/30">
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-800/30 rounded-xl border border-slate-700/30">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-2">
