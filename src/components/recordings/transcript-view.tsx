@@ -413,23 +413,26 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
     }> = [];
 
     let currentParagraph: typeof result[0] | null = null;
-    let sentenceCount = 0;
-    const SENTENCES_PER_PARAGRAPH = 4; // Break every ~4 sentences for readability
+    let wordCount = 0;
+    let segmentCount = 0;
+    const WORDS_PER_PARAGRAPH = 50; // Break every ~50 words
+    const MAX_SEGMENTS_PER_PARAGRAPH = 5; // Or every 5 segments
 
     transcript.segments.forEach((segment, index) => {
       const isNewSpeaker = !currentParagraph || currentParagraph.speaker !== segment.speaker;
 
-      // Count sentences in this segment (rough estimate)
-      const sentencesInSegment = (segment.text.match(/[.!?]+/g) || []).length || 1;
+      // Count words in this segment
+      const wordsInSegment = segment.text.split(/\s+/).length;
 
       // Check if we should start a new paragraph
       const shouldBreak = isNewSpeaker ||
-        (hasSingleSpeaker && sentenceCount >= SENTENCES_PER_PARAGRAPH);
+        (hasSingleSpeaker && (wordCount >= WORDS_PER_PARAGRAPH || segmentCount >= MAX_SEGMENTS_PER_PARAGRAPH));
 
       if (shouldBreak) {
         currentParagraph = { speaker: segment.speaker, segments: [] };
         result.push(currentParagraph);
-        sentenceCount = 0;
+        wordCount = 0;
+        segmentCount = 0;
       }
 
       currentParagraph!.segments.push({
@@ -437,7 +440,8 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
         start: segment.start,
         index
       });
-      sentenceCount += sentencesInSegment;
+      wordCount += wordsInSegment;
+      segmentCount += 1;
     });
 
     return result;
