@@ -1,16 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight, Calendar, Clock, Users, FileAudio } from "lucide-react";
+import { ChevronRight, Calendar, Clock, Users, FileAudio, Download } from "lucide-react";
 import { formatDate, formatDuration } from "@/lib/utils";
 import type { Recording, Speaker } from "@/types/database";
 
 interface DetailHeaderProps {
   recording: Recording;
   speakers: Speaker[];
+  onDownloadAudio?: () => void;
 }
 
-export function DetailHeader({ recording, speakers }: DetailHeaderProps) {
+export function DetailHeader({ recording, speakers, onDownloadAudio }: DetailHeaderProps) {
   return (
     <div className="space-y-4">
       {/* Breadcrumbs */}
@@ -22,18 +23,29 @@ export function DetailHeader({ recording, speakers }: DetailHeaderProps) {
           Записи
         </Link>
         <ChevronRight className="w-4 h-4" />
-        <span className="text-white truncate max-w-[300px]">
+        <span className="text-white truncate max-w-[200px] sm:max-w-[300px]">
           {recording.title}
         </span>
       </nav>
 
-      {/* Title */}
+      {/* Title + Download button */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl md:text-3xl font-bold text-white truncate">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-white truncate">
             {recording.title}
           </h1>
         </div>
+        {onDownloadAudio && (
+          <button
+            onClick={onDownloadAudio}
+            disabled={recording.status === "uploading"}
+            className="shrink-0 flex items-center justify-center gap-2 px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Скачать аудио"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden sm:inline">Скачать аудио</span>
+          </button>
+        )}
       </div>
 
       {/* Metadata */}
