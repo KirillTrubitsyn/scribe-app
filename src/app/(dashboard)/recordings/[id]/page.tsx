@@ -14,7 +14,9 @@ import { AIChat } from "@/components/recordings/ai-chat";
 import { ProtocolView } from "@/components/recordings/protocol-view";
 import { DetailSidebar } from "@/components/recordings/detail-sidebar";
 import { ProcessingStatus } from "@/components/recordings/processing-status";
+import { ChatHistory } from "@/components/recordings/chat-history";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { createChatSession } from "@/lib/chat-storage";
 
 import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
 
@@ -51,6 +53,10 @@ export default function RecordingDetailPage({
   const [activeTab, setActiveTab] = useState<TabValue>("transcript");
   const [currentTime, setCurrentTime] = useState(0);
   const [seekTo, setSeekTo] = useState<number | null>(null);
+
+  // Chat state
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [chatHistoryRefresh, setChatHistoryRefresh] = useState(0);
 
   // Resolve params
   useEffect(() => {
@@ -276,6 +282,27 @@ export default function RecordingDetailPage({
     console.log("Update speaker:", speakerId, name);
   };
 
+  // Chat handlers
+  const handleChatChange = useCallback((chatId: string) => {
+    setCurrentChatId(chatId);
+  }, []);
+
+  const handleChatUpdate = useCallback(() => {
+    setChatHistoryRefresh((prev) => prev + 1);
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    if (!recordingId) return;
+    const newSession = createChatSession(recordingId);
+    setCurrentChatId(newSession.id);
+    setChatHistoryRefresh((prev) => prev + 1);
+  }, [recordingId]);
+
+  const handleSelectChat = useCallback((chatId: string) => {
+    setCurrentChatId(chatId);
+    setActiveTab("chat");
+  }, []);
+
   // Loading state
   if (loading) {
     return (
@@ -400,6 +427,9 @@ export default function RecordingDetailPage({
                   <AIChat
                     recordingId={recording.id}
                     hasTranscript={!!transcript}
+                    currentChatId={currentChatId}
+                    onChatChange={handleChatChange}
+                    onChatUpdate={handleChatUpdate}
                   />
                 )}
 
@@ -416,7 +446,7 @@ export default function RecordingDetailPage({
           </div>
 
           {/* Right column - Sidebar */}
-          <aside className="lg:sticky lg:top-8 lg:self-start">
+          <aside className="lg:sticky lg:top-8 lg:self-start space-y-6">
             <DetailSidebar
               recording={recording}
               transcript={transcript}
@@ -429,6 +459,16 @@ export default function RecordingDetailPage({
               isAnalyzing={isAnalyzing}
               isExportingDocx={isExportingDocx}
             />
+            {/* Chat History */}
+            {transcript && (
+              <ChatHistory
+                recordingId={recording.id}
+                currentChatId={currentChatId}
+                onSelectChat={handleSelectChat}
+                onNewChat={handleNewChat}
+                refreshTrigger={chatHistoryRefresh}
+              />
+            )}
           </aside>
         </div>
       </div>

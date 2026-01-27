@@ -1,17 +1,23 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, MessageSquare, Bot, User, Trash2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { Send, Loader2, MessageSquare, Bot, User, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+import {
+  ChatMessage,
+  ChatSession,
+  getChatSession,
+  updateChatSession,
+  getOrCreateCurrentChat,
+  createChatSession,
+} from "@/lib/chat-storage";
 
 interface AIChatProps {
   recordingId: string;
   hasTranscript: boolean;
+  currentChatId: string | null;
+  onChatChange: (chatId: string) => void;
+  onChatUpdate: () => void; // Called when messages are updated to refresh history
 }
 
 const SUGGESTED_QUESTIONS = [
@@ -22,13 +28,40 @@ const SUGGESTED_QUESTIONS = [
   "Были ли назначены какие-то задачи?",
 ];
 
-export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
+export function AIChat({
+  recordingId,
+  hasTranscript,
+  currentChatId,
+  onChatChange,
+  onChatUpdate,
+}: AIChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Load chat when currentChatId changes
+  useEffect(() => {
+    if (!currentChatId) {
+      // Get or create current chat
+      const session = getOrCreateCurrentChat(recordingId);
+      setMessages(session.messages);
+      onChatChange(session.id);
+    } else {
+      // Load existing chat
+      const session = getChatSession(recordingId, currentChatId);
+      if (session) {
+        setMessages(session.messages);
+      } else {
+        // Chat not found, create new one
+        const newSession = getOrCreateCurrentChat(recordingId);
+        setMessages(newSession.messages);
+        onChatChange(newSession.id);
+      }
+    }
+  }, [recordingId, currentChatId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -43,16 +76,29 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
     }
   }, [input]);
 
+  // Save messages to storage
+  const saveMessages = useCallback(
+    (newMessages: ChatMessage[]) => {
+      if (currentChatId) {
+        updateChatSession(recordingId, currentChatId, newMessages);
+        onChatUpdate();
+      }
+    },
+    [recordingId, currentChatId, onChatUpdate]
+  );
+
   const sendMessage = async (messageText?: string) => {
     const text = messageText || input.trim();
-    if (!text || isLoading) return;
+    if (!text || isLoading || !currentChatId) return;
 
     setError(null);
     setInput("");
 
     // Add user message
     const userMessage: ChatMessage = { role: "user", content: text };
-    setMessages((prev) => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    saveMessages(newMessages);
     setIsLoading(true);
 
     try {
@@ -79,11 +125,14 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
         role: "assistant",
         content: data.message,
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+      const updatedMessages = [...newMessages, assistantMessage];
+      setMessages(updatedMessages);
+      saveMessages(updatedMessages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка");
       // Remove the user message if there was an error
-      setMessages((prev) => prev.slice(0, -1));
+      setMessages(messages);
+      saveMessages(messages);
     } finally {
       setIsLoading(false);
     }
@@ -96,9 +145,11 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
     }
   };
 
-  const clearChat = () => {
+  const handleNewChat = () => {
+    const newSession = createChatSession(recordingId);
     setMessages([]);
-    setError(null);
+    onChatChange(newSession.id);
+    onChatUpdate();
   };
 
   if (!hasTranscript) {
@@ -121,15 +172,14 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
           <Bot className="w-5 h-5 text-orange-500" />
           <span className="font-medium text-white">Чат по транскрипту</span>
         </div>
-        {messages.length > 0 && (
-          <button
-            onClick={clearChat}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-            title="Очистить чат"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        )}
+        <button
+          onClick={handleNewChat}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+          title="Новый чат"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Новый чат</span>
+        </button>
       </div>
 
       {/* Messages */}
