@@ -6,6 +6,7 @@ import { AlertTriangle, RefreshCw } from "lucide-react";
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  className?: string;
 }
 
 interface State {
@@ -68,6 +69,9 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
+    if (this.props.className) {
+      return <div className={this.props.className}>{this.props.children}</div>;
+    }
     return this.props.children;
   }
 }
