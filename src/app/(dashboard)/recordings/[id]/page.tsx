@@ -142,9 +142,45 @@ export default function RecordingDetailPage({
     }
   };
 
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+
   const handleDownloadDocx = async () => {
-    // TODO: Implement DOCX export
-    alert("Экспорт в DOCX будет доступен в ближайшее время");
+    if (!recordingId || isExportingDocx) return;
+
+    setIsExportingDocx(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/export/docx`);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to export document");
+      }
+
+      // Get filename from Content-Disposition header or generate one
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "recording.docx";
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+        if (filenameMatch) {
+          filename = decodeURIComponent(filenameMatch[1].replace(/["']/g, ""));
+        }
+      }
+
+      // Download the file
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось экспортировать документ");
+    } finally {
+      setIsExportingDocx(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -391,6 +427,7 @@ export default function RecordingDetailPage({
               onAIAnalysis={handleAIAnalysis}
               isDeleting={isDeleting}
               isAnalyzing={isAnalyzing}
+              isExportingDocx={isExportingDocx}
             />
           </aside>
         </div>
