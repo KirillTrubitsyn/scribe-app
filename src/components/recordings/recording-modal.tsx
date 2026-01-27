@@ -250,13 +250,15 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                     setShowTitleInput(false);
                     start();
                   }}
-                  className="flex-1 py-3 rounded-xl font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  disabled={uploadState === "uploading"}
+                  className="flex-1 py-3 rounded-xl font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Перезаписать
                 </button>
                 <button
                   onClick={handleUpload}
-                  className="flex-1 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all"
+                  disabled={uploadState === "uploading"}
+                  className="flex-1 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Сохранить
                 </button>

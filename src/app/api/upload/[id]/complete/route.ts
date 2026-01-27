@@ -26,11 +26,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     let transcriptionModel: TranscriptionModel = "gemini";
     try {
       const body = await request.json();
+      console.log("[Upload Complete] Received body:", JSON.stringify(body));
       if (body.transcription_model === "gemini" || body.transcription_model === "chirp") {
         transcriptionModel = body.transcription_model;
       }
-    } catch {
+      console.log("[Upload Complete] Using transcription model:", transcriptionModel);
+    } catch (parseError) {
       // Body is optional, default to gemini
+      console.log("[Upload Complete] No body or parse error, using default model:", transcriptionModel, parseError);
     }
 
     if (!recordingId) {
