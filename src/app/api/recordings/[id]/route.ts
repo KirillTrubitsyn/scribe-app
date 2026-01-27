@@ -84,6 +84,56 @@ export async function GET(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { title } = body;
+
+    if (!title || typeof title !== "string" || title.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Title is required" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+
+    const { data, error } = await supabase
+      .from("recordings")
+      .update({ title: title.trim() })
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("[API /recordings/:id PATCH] Error updating recording:", error);
+      return NextResponse.json(
+        { error: "Failed to update recording" },
+        { status: 500 }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "Recording not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error("Error updating recording:", error);
+    return NextResponse.json(
+      { error: "Failed to update recording" },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
