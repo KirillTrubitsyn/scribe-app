@@ -23,6 +23,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   const [title, setTitle] = useState("");
   const [showTitleInput, setShowTitleInput] = useState(false);
   const [model, setModel] = useState<TranscriptionModel>("gemini");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     state: recordingState,
@@ -53,6 +54,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
       setTitle("");
       setShowTitleInput(false);
       setModel("gemini");
+      setIsSubmitting(false);
     }
   }, [isOpen, resetRecording, resetUpload]);
 
@@ -77,7 +79,9 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   }, [uploadState, onClose]);
 
   const handleUpload = async () => {
-    if (!audioBlob) return;
+    if (!audioBlob || isSubmitting) return;
+
+    setIsSubmitting(true);
 
     // Create a File from the Blob
     // Normalize content type - API expects base type without codecs
@@ -94,6 +98,8 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
         router.push(`/recordings/${result}`);
         onClose();
       }, 1500);
+    } else {
+      setIsSubmitting(false);
     }
   };
 
@@ -250,15 +256,17 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                     setShowTitleInput(false);
                     start();
                   }}
-                  className="flex-1 py-3 rounded-xl font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 rounded-xl font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Перезаписать
                 </button>
                 <button
                   onClick={handleUpload}
-                  className="flex-1 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all"
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Сохранить
+                  {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>
               </div>
             </div>
