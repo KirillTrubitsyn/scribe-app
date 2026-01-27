@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 import type { Transcript, ArtifactType } from "@/types/database";
 
 // ============================================
@@ -95,17 +95,25 @@ function getGeminiClient() {
     throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
+  return new GoogleGenAI({ apiKey });
+}
 
-  return genAI.getGenerativeModel({
+async function generateContent(genAI: GoogleGenAI, prompt: string): Promise<string> {
+  const response = await genAI.models.generateContent({
     model: "gemini-3-flash-preview",
-    generationConfig: {
+    contents: prompt,
+    config: {
       temperature: 0.3,
       topP: 0.8,
       topK: 40,
       maxOutputTokens: 8192,
+      thinkingConfig: {
+        thinkingLevel: ThinkingLevel.HIGH,
+      },
     },
   });
+
+  return response.text || "";
 }
 
 function prepareTranscriptForAnalysis(transcript: Transcript): string {
@@ -218,7 +226,7 @@ export async function POST(
     // 6. Run AI analysis
     console.log(`[Analysis] Starting analysis for recording ${recordingId}`);
 
-    const model = getGeminiClient();
+    const genAI = getGeminiClient();
     const fullText = prepareTranscriptForAnalysis(transcript);
 
     if (!fullText || fullText.length < 50) {
@@ -255,15 +263,14 @@ export async function POST(
     // Run summary and action items analyses in parallel
     console.log("[Analysis] Running analyses in parallel...");
 
-    const [summaryResult, actionItemsResult] = await Promise.all([
-      model.generateContent(SUMMARY_PROMPT + fullText),
-      model.generateContent(ACTION_ITEMS_PROMPT + fullText),
+    const [summaryText, actionItemsText] = await Promise.all([
+      generateContent(genAI, SUMMARY_PROMPT + fullText),
+      generateContent(genAI, ACTION_ITEMS_PROMPT + fullText),
     ]);
 
     const artifacts: ArtifactData[] = [];
 
     // Parse summary
-    const summaryText = summaryResult.response.text();
     const summary = parseJsonResponse<SummaryOutput>(summaryText);
     if (summary) {
       artifacts.push({
@@ -275,7 +282,6 @@ export async function POST(
     }
 
     // Parse action items
-    const actionItemsText = actionItemsResult.response.text();
     const actionItems = parseJsonResponse<ActionItemsOutput>(actionItemsText);
     if (actionItems) {
       artifacts.push({

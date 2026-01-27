@@ -1,5 +1,5 @@
 import { Storage } from '@google-cloud/storage'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import type { TranscriptSegment } from './supabase.js'
 import type { TranscriptData, SpeakerData } from './webhook.js'
 
@@ -64,17 +64,7 @@ function getGeminiClient() {
     throw new Error('Missing GEMINI_API_KEY environment variable')
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey)
-
-  return genAI.getGenerativeModel({
-    model: 'gemini-3-flash-preview',
-    generationConfig: {
-      temperature: 0.1,
-      topP: 0.8,
-      topK: 40,
-      maxOutputTokens: 65536,
-    },
-  })
+  return new GoogleGenAI({ apiKey })
 }
 
 // ============================================
@@ -136,19 +126,31 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
 
     // 2. Send to Gemini for transcription
     console.log('[Transcription] Sending to Gemini 3 Flash...')
-    const model = getGeminiClient()
+    const genAI = getGeminiClient()
 
-    const result = await model.generateContent([
-      TRANSCRIPTION_PROMPT,
-      {
-        inlineData: {
-          mimeType: audioData.mimeType,
-          data: audioData.base64,
+    const result = await genAI.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: [
+        { text: TRANSCRIPTION_PROMPT },
+        {
+          inlineData: {
+            mimeType: audioData.mimeType,
+            data: audioData.base64,
+          },
+        },
+      ],
+      config: {
+        temperature: 0.1,
+        topP: 0.8,
+        topK: 40,
+        maxOutputTokens: 65536,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.LOW,
         },
       },
-    ])
+    })
 
-    const responseText = result.response.text()
+    const responseText = result.text || ''
     console.log('[Transcription] Received response from Gemini')
 
     // 3. Parse response

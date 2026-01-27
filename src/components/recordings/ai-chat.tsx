@@ -114,7 +114,7 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-[500px] bg-slate-800/30 rounded-xl border border-slate-700/30">
+    <div className="flex flex-col h-[calc(100vh-300px)] min-h-[400px] bg-slate-800/30 rounded-xl border border-slate-700/30">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-2">
@@ -220,8 +220,8 @@ export function AIChat({ recordingId, hasTranscript }: AIChatProps) {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Задайте вопрос..."
-            rows={1}
-            className="flex-1 px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
+            rows={2}
+            className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
             disabled={isLoading}
           />
           <button

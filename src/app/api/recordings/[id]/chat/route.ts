@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI, type Content } from "@google/genai";
 import type { Transcript } from "@/types/database";
 
 // ============================================
@@ -52,17 +52,7 @@ function getGeminiClient() {
     throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-
-  return genAI.getGenerativeModel({
-    model: "gemini-3-flash-preview",
-    generationConfig: {
-      temperature: 0.7,
-      topP: 0.9,
-      topK: 40,
-      maxOutputTokens: 4096,
-    },
-  });
+  return new GoogleGenAI({ apiKey });
 }
 
 function prepareTranscriptContext(transcript: Transcript): string {
@@ -151,7 +141,7 @@ export async function POST(
 
   try {
     // 5. Prepare context and chat
-    const model = getGeminiClient();
+    const genAI = getGeminiClient();
     const transcriptContext = prepareTranscriptContext(transcript);
 
     // Build conversation context
@@ -165,30 +155,45 @@ ${transcriptContext}
 
 `;
 
-    // Build chat history
-    const chatHistory = history.map((msg) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
-    }));
+    // Build chat history as contents array
+    const contents: Content[] = [
+      {
+        role: "user",
+        parts: [{ text: contextPrompt }],
+      },
+      {
+        role: "model",
+        parts: [{ text: "Понял. Я готов отвечать на вопросы по этому транскрипту. Что вас интересует?" }],
+      },
+    ];
 
-    // Start chat with context
-    const chat = model.startChat({
-      history: [
-        {
-          role: "user",
-          parts: [{ text: contextPrompt }],
-        },
-        {
-          role: "model",
-          parts: [{ text: "Понял. Я готов отвечать на вопросы по этому транскрипту. Что вас интересует?" }],
-        },
-        ...chatHistory,
-      ],
+    // Add previous messages
+    for (const msg of history) {
+      contents.push({
+        role: msg.role === "user" ? "user" : "model",
+        parts: [{ text: msg.content }],
+      });
+    }
+
+    // Add current message
+    contents.push({
+      role: "user",
+      parts: [{ text: message }],
     });
 
-    // Send message
-    const result = await chat.sendMessage(message);
-    const response = result.response.text();
+    // Send to Gemini
+    const result = await genAI.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents,
+      config: {
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+        maxOutputTokens: 4096,
+      },
+    });
+
+    const response = result.text || "";
 
     return NextResponse.json({
       success: true,
