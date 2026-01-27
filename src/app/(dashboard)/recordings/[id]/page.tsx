@@ -354,15 +354,15 @@ export default function RecordingDetailPage({
   const transcript = recording.transcripts?.[0] ?? null;
 
   return (
-    <div className="p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 flex-1 flex flex-col min-h-0">
+      <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
         {/* Header */}
         <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
 
         {/* Main content with sidebar */}
-        <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="mt-6 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
           {/* Left column - Player, Tabs, Content */}
-          <div className="flex flex-col gap-6 min-w-0 h-[calc(100vh-48px)]">
+          <div className="flex flex-col gap-6 min-w-0 min-h-0">
             {/* Audio Player */}
             {recording.audioUrl ? (
               <AudioPlayer
