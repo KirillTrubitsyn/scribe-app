@@ -2,7 +2,6 @@
 
 import {
   Download,
-  FileText,
   Loader2,
   Sparkles,
 } from "lucide-react";
@@ -14,10 +13,8 @@ interface DetailSidebarProps {
   transcript: Transcript | null;
   artifacts: Artifact[];
   onDownloadAudio: () => void;
-  onDownloadDocx: () => void;
   onAIAnalysis?: () => void;
   isAnalyzing?: boolean;
-  isExportingDocx?: boolean;
 }
 
 export function DetailSidebar({
@@ -25,13 +22,10 @@ export function DetailSidebar({
   transcript,
   artifacts,
   onDownloadAudio,
-  onDownloadDocx,
   onAIAnalysis,
   isAnalyzing = false,
-  isExportingDocx = false,
 }: DetailSidebarProps) {
   const hasSummary = artifacts.some((a) => a.type === "summary");
-  const hasTranscript = transcript && transcript.segments?.length > 0;
 
   return (
     <div className="space-y-6">
@@ -47,22 +41,11 @@ export function DetailSidebar({
           >
             Скачать аудио
           </SidebarButton>
-
-          <SidebarButton
-            onClick={onDownloadDocx}
-            icon={
-              isExportingDocx ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <FileText className="w-4 h-4" />
-              )
-            }
-            disabled={!hasTranscript || isExportingDocx}
-            title={!hasTranscript ? "Транскрипт еще не готов" : undefined}
-          >
-            {isExportingDocx ? "Экспорт..." : "Скачать DOCX"}
-          </SidebarButton>
         </div>
+
+        <p className="text-xs text-slate-500 mt-3">
+          Экспорт в DOCX доступен в каждой вкладке (Транскрипт, Резюме, Протокол)
+        </p>
       </div>
 
       {/* AI Analysis Section */}

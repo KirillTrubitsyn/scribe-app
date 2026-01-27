@@ -1,18 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   FileText,
   CheckCircle2,
   ListTodo,
   Sparkles,
   User,
+  Pencil,
+  X,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
 
 interface SummaryViewProps {
   artifacts: Artifact[];
+  recordingId?: string;
 }
 
 // Types for parsed artifact content
@@ -36,7 +41,11 @@ interface ParsedSummary {
   topics?: string[];
 }
 
-export function SummaryView({ artifacts }: SummaryViewProps) {
+export function SummaryView({ artifacts, recordingId }: SummaryViewProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
   // Find the summary artifact
   const summaryArtifact = artifacts.find((a) => a.type === "summary");
   const actionItemsArtifact = artifacts.find((a) => a.type === "action_items");
@@ -101,6 +110,99 @@ export function SummaryView({ artifacts }: SummaryViewProps) {
     }
   }, [actionItemsArtifact]);
 
+  // Generate text for editing
+  const generateEditText = (): string => {
+    if (!parsedSummary) return "";
+
+    let text = `# Краткое содержание\n\n${parsedSummary.summary}\n`;
+
+    if (parsedSummary.keyPoints && parsedSummary.keyPoints.length > 0) {
+      text += `\n# Ключевые моменты\n\n`;
+      parsedSummary.keyPoints.forEach((point) => {
+        text += `• ${point}\n`;
+      });
+    }
+
+    if (parsedSummary.decisions && parsedSummary.decisions.length > 0) {
+      text += `\n# Принятые решения\n\n`;
+      parsedSummary.decisions.forEach((decision) => {
+        const decisionText = typeof decision === "string" ? decision : decision.text;
+        text += `• ${decisionText}\n`;
+      });
+    }
+
+    if (actionItems.length > 0) {
+      text += `\n# Задачи\n\n`;
+      actionItems.forEach((item, index) => {
+        let taskText = `${index + 1}. ${item.task}`;
+        if (item.assignee) taskText += ` | Ответственный: ${item.assignee}`;
+        if (item.deadline) taskText += ` | Срок: ${item.deadline}`;
+        text += `${taskText}\n`;
+      });
+    }
+
+    return text;
+  };
+
+  const handleStartEdit = () => {
+    setEditedContent(generateEditText());
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedContent("");
+    setIsEditing(false);
+  };
+
+  const handleExportDocx = async (useEdited: boolean = false) => {
+    if (!recordingId) return;
+
+    setIsExporting(true);
+    try {
+      let response: Response;
+
+      if (useEdited && editedContent) {
+        response = await fetch(`/api/recordings/${recordingId}/export/docx`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "summary", content: editedContent }),
+        });
+      } else {
+        response = await fetch(
+          `/api/recordings/${recordingId}/export/docx?type=summary`
+        );
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to export");
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "summary.docx";
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+        if (match) {
+          filename = decodeURIComponent(match[1].replace(/["']/g, ""));
+        }
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось экспортировать");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!summaryArtifact && !actionItemsArtifact) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -113,8 +215,70 @@ export function SummaryView({ artifacts }: SummaryViewProps) {
     );
   }
 
+  if (isEditing) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium text-white">Редактирование резюме</h2>
+        </div>
+        <textarea
+          value={editedContent}
+          onChange={(e) => setEditedContent(e.target.value)}
+          className="w-full h-[500px] p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+          placeholder="Редактируйте резюме..."
+        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExportDocx(true)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Экспортировать отредактированный
+          </button>
+          <button
+            onClick={handleCancelEdit}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+          >
+            <X className="w-4 h-4" />
+            Отмена
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Toolbar */}
+      <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={handleStartEdit}
+          className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+        >
+          <Pencil className="w-4 h-4" />
+          Редактировать
+        </button>
+        {recordingId && (
+          <button
+            onClick={() => handleExportDocx(false)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Экспорт DOCX
+          </button>
+        )}
+      </div>
+
       {/* Summary Section */}
       {parsedSummary && (
         <SummarySection

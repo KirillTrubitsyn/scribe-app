@@ -12,6 +12,8 @@ import {
   Loader2,
   RefreshCw,
   Download,
+  Pencil,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
@@ -40,6 +42,9 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [protocol, setProtocol] = useState<ProtocolData | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
 
   // Parse protocol from artifacts
   const existingProtocol = useMemo(() => {
@@ -82,60 +87,123 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
     }
   };
 
-  const downloadProtocol = () => {
-    if (!protocol) return;
+  // Generate text for editing
+  const generateEditText = (): string => {
+    if (!protocol) return "";
 
-    // Generate markdown
-    let markdown = `# ${protocol.title}\n\n`;
-    markdown += `**Дата:** ${protocol.date}\n\n`;
+    let text = `# ${protocol.title}\n`;
+    text += `Дата: ${protocol.date}\n\n`;
 
     if (protocol.participants.length > 0) {
-      markdown += `## Участники\n`;
+      text += `# Участники\n`;
       protocol.participants.forEach((p) => {
-        markdown += `- ${p}\n`;
+        text += `• ${p}\n`;
       });
-      markdown += "\n";
+      text += "\n";
     }
 
     if (protocol.agenda.length > 0) {
-      markdown += `## Повестка дня\n`;
+      text += `# Повестка дня\n`;
       protocol.agenda.forEach((item, i) => {
-        markdown += `${i + 1}. ${item}\n`;
+        text += `${i + 1}. ${item}\n`;
       });
-      markdown += "\n";
+      text += "\n";
     }
 
     if (protocol.discussion.length > 0) {
-      markdown += `## Обсуждение\n\n`;
+      text += `# Обсуждение\n\n`;
       protocol.discussion.forEach((item) => {
-        markdown += `### ${item.topic}\n`;
-        markdown += `${item.summary}\n\n`;
+        text += `## ${item.topic}\n`;
+        text += `${item.summary}\n`;
         if (item.decisions.length > 0) {
-          markdown += `**Решения:**\n`;
+          text += `Решения:\n`;
           item.decisions.forEach((d) => {
-            markdown += `- ${d}\n`;
+            text += `• ${d}\n`;
           });
-          markdown += "\n";
         }
+        text += "\n";
       });
     }
 
     if (protocol.conclusions.length > 0) {
-      markdown += `## Итоги\n`;
+      text += `# Итоги\n`;
       protocol.conclusions.forEach((c) => {
-        markdown += `- ${c}\n`;
+        text += `• ${c}\n`;
       });
-      markdown += "\n";
+      text += "\n";
     }
 
     if (protocol.next_steps.length > 0) {
-      markdown += `## Дальнейшие шаги\n`;
+      text += `# Дальнейшие шаги\n`;
       protocol.next_steps.forEach((step) => {
-        markdown += `- ${step}\n`;
+        text += `• ${step}\n`;
       });
     }
 
-    // Download
+    return text;
+  };
+
+  const handleStartEdit = () => {
+    setEditedContent(generateEditText());
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedContent("");
+    setIsEditing(false);
+  };
+
+  const handleExportDocx = async (useEdited: boolean = false) => {
+    setIsExporting(true);
+    try {
+      let response: Response;
+
+      if (useEdited && editedContent) {
+        response = await fetch(`/api/recordings/${recordingId}/export/docx`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "protocol", content: editedContent }),
+        });
+      } else {
+        response = await fetch(
+          `/api/recordings/${recordingId}/export/docx?type=protocol`
+        );
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to export");
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "protocol.docx";
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+        if (match) {
+          filename = decodeURIComponent(match[1].replace(/["']/g, ""));
+        }
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось экспортировать");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const downloadProtocolMd = () => {
+    if (!protocol) return;
+
+    const markdown = generateEditText();
     const blob = new Blob([markdown], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -190,10 +258,47 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
 
   if (!protocol) return null;
 
+  if (isEditing) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium text-white">Редактирование протокола</h2>
+        </div>
+        <textarea
+          value={editedContent}
+          onChange={(e) => setEditedContent(e.target.value)}
+          className="w-full h-[500px] p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+          placeholder="Редактируйте протокол..."
+        />
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleExportDocx(true)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Экспортировать отредактированный
+          </button>
+          <button
+            onClick={handleCancelEdit}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+          >
+            <X className="w-4 h-4" />
+            Отмена
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header with actions */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h2 className="text-xl font-semibold text-white">{protocol.title}</h2>
           <div className="flex items-center gap-2 mt-1 text-slate-400 text-sm">
@@ -203,6 +308,13 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
         </div>
         <div className="flex gap-2">
           <button
+            onClick={handleStartEdit}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            Редактировать
+          </button>
+          <button
             onClick={generateProtocol}
             disabled={isGenerating}
             className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
@@ -211,11 +323,17 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
             <RefreshCw className={cn("w-5 h-5", isGenerating && "animate-spin")} />
           </button>
           <button
-            onClick={downloadProtocol}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
-            title="Скачать"
+            onClick={() => handleExportDocx(false)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            title="Экспорт DOCX"
           >
-            <Download className="w-5 h-5" />
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Экспорт DOCX
           </button>
         </div>
       </div>
