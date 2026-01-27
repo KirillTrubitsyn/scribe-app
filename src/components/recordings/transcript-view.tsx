@@ -11,6 +11,8 @@ import {
   Download,
   Loader2,
   Save,
+  Share2,
+  Copy,
 } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import type { Transcript, TranscriptSegment, Speaker } from "@/types/database";
@@ -83,8 +85,9 @@ export function TranscriptView({
   const [editedText, setEditedText] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "shared">("idle");
 
-  // Generate full text for editing
+  // Generate full text for sharing/editing
   const fullTextForEdit = useMemo(() => {
     if (!transcript) return "";
     if (transcript.full_text) return transcript.full_text;
@@ -179,6 +182,35 @@ export function TranscriptView({
     }
   };
 
+  const handleShare = async () => {
+    const textToShare = fullTextForEdit;
+
+    // Try native share API first (mobile)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Транскрипт",
+          text: textToShare,
+        });
+        setShareStatus("shared");
+        setTimeout(() => setShareStatus("idle"), 2000);
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fall back to clipboard
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+
+    // Fallback to clipboard
+    try {
+      await navigator.clipboard.writeText(textToShare);
+      setShareStatus("copied");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    } catch {
+      alert("Не удалось скопировать текст");
+    }
+  };
+
   if (!transcript || !transcript.segments || transcript.segments.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-slate-400">
@@ -238,20 +270,54 @@ export function TranscriptView({
           </button>
         </div>
 
-        {/* Export button */}
-        {recordingId && viewMode !== "edit" && (
-          <button
-            onClick={() => handleExportDocx(false)}
-            disabled={isExporting}
-            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ml-auto"
-          >
-            {isExporting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Download className="w-4 h-4" />
+        {/* Action buttons */}
+        {viewMode !== "edit" && (
+          <div className="flex items-center gap-2 ml-auto">
+            {/* Share button */}
+            <button
+              onClick={handleShare}
+              className={cn(
+                "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                shareStatus !== "idle"
+                  ? "bg-emerald-500 text-white"
+                  : "bg-slate-700 hover:bg-slate-600 text-white"
+              )}
+              title="Поделиться"
+            >
+              {shareStatus === "copied" ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span className="hidden sm:inline">Скопировано</span>
+                </>
+              ) : shareStatus === "shared" ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span className="hidden sm:inline">Отправлено</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Поделиться</span>
+                </>
+              )}
+            </button>
+
+            {/* Export button */}
+            {recordingId && (
+              <button
+                onClick={() => handleExportDocx(false)}
+                disabled={isExporting}
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                <span className="hidden sm:inline">Экспорт DOCX</span>
+              </button>
             )}
-            <span className="hidden sm:inline">Экспорт DOCX</span>
-          </button>
+          </div>
         )}
       </div>
 
