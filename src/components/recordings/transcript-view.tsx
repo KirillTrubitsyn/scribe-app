@@ -315,6 +315,7 @@ export function TranscriptView({
         ) : (
           <FullTextView
             transcript={transcript}
+            speakers={speakers}
             currentTime={currentTime}
             onSegmentClick={onSegmentClick}
           />
@@ -365,53 +366,93 @@ function TranscriptSegmentItem({
   );
 }
 
-// Full text view for continuous reading (better for songs, monologues)
+// Full text view for continuous reading with speaker breaks
 interface FullTextViewProps {
   transcript: Transcript;
+  speakers: Speaker[];
   currentTime?: number;
   onSegmentClick?: (startTime: number) => void;
 }
 
-function FullTextView({ transcript, currentTime = 0, onSegmentClick }: FullTextViewProps) {
-  // Use full_text if available, otherwise concatenate segments
-  const fullText = transcript.full_text ||
-    transcript.segments.map(s => s.text).join(' ');
+function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }: FullTextViewProps) {
+  // Create speaker name map
+  const speakerMap = useMemo(() => {
+    const map = new Map<string, string>();
+    speakers.forEach((s) => {
+      const key = `Speaker ${s.speaker_index}`;
+      map.set(key, s.name || key);
+    });
+    return map;
+  }, [speakers]);
+
+  const getSpeakerName = (speaker: string): string => {
+    return speakerMap.get(speaker) || speaker;
+  };
 
   // Find current segment for highlighting
   const currentSegmentIndex = transcript.segments.findIndex(
     s => currentTime >= s.start && currentTime < s.end
   );
 
-  // If we have full_text, show it as simple text
+  // Group consecutive segments by same speaker
+  const groupedSegments = useMemo(() => {
+    const groups: { speaker: string; segments: { text: string; start: number; index: number }[] }[] = [];
+    let currentGroup: { speaker: string; segments: { text: string; start: number; index: number }[] } | null = null;
+
+    transcript.segments.forEach((segment, index) => {
+      if (!currentGroup || currentGroup.speaker !== segment.speaker) {
+        currentGroup = { speaker: segment.speaker, segments: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.segments.push({ text: segment.text, start: segment.start, index });
+    });
+
+    return groups;
+  }, [transcript.segments]);
+
+  // If we have full_text, show it with line breaks preserved
   if (transcript.full_text) {
     return (
       <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
-        <p className="text-slate-200 leading-relaxed whitespace-pre-wrap text-base">
-          {fullText}
-        </p>
+        <div className="text-slate-200 leading-relaxed text-base space-y-4">
+          {transcript.full_text.split('\n\n').map((paragraph, idx) => (
+            <p key={idx} className="whitespace-pre-wrap">
+              {paragraph}
+            </p>
+          ))}
+        </div>
       </div>
     );
   }
 
-  // Otherwise, show clickable segments as continuous text with highlighting
+  // Show segments grouped by speaker with visual breaks
   return (
-    <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
-      <p className="text-slate-200 leading-relaxed text-base">
-        {transcript.segments.map((segment, index) => (
-          <span
-            key={index}
-            onClick={() => onSegmentClick?.(segment.start)}
-            className={cn(
-              "cursor-pointer transition-colors hover:text-orange-400",
-              currentSegmentIndex === index && "bg-orange-500/20 text-orange-300 rounded px-1"
-            )}
-            title={`${formatDuration(segment.start)} - ${segment.speaker}`}
-          >
-            {segment.text}
-            {index < transcript.segments.length - 1 ? ' ' : ''}
+    <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30 space-y-4">
+      {groupedSegments.map((group, groupIndex) => (
+        <div key={groupIndex} className="space-y-1">
+          {/* Speaker label */}
+          <span className="text-xs text-slate-500 font-medium">
+            {getSpeakerName(group.speaker)}
           </span>
-        ))}
-      </p>
+          {/* Speaker's text */}
+          <p className="text-slate-200 leading-relaxed text-base">
+            {group.segments.map((seg, segIdx) => (
+              <span
+                key={seg.index}
+                onClick={() => onSegmentClick?.(seg.start)}
+                className={cn(
+                  "cursor-pointer transition-colors hover:text-orange-400",
+                  currentSegmentIndex === seg.index && "bg-orange-500/20 text-orange-300 rounded px-1"
+                )}
+                title={formatDuration(seg.start)}
+              >
+                {seg.text}
+                {segIdx < group.segments.length - 1 ? ' ' : ''}
+              </span>
+            ))}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }

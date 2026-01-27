@@ -19,6 +19,21 @@ import {
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
 
+// Clean markdown artifacts from text
+function cleanText(text: string): string {
+  return text
+    // Remove bold/italic markers
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove code markers
+    .replace(/`([^`]+)`/g, '$1')
+    // Clean up extra whitespace
+    .trim();
+}
+
 interface ProtocolViewProps {
   recordingId: string;
   artifacts: Artifact[];
@@ -83,6 +98,8 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
 
       const data = await response.json();
       setProtocol(data.protocol);
+      // Refresh parent to persist the new protocol
+      onUpdate?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Произошла ошибка");
     } finally {
@@ -390,7 +407,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                 key={index}
                 className="px-3 py-1.5 bg-slate-700/50 rounded-full text-sm text-slate-300"
               >
-                {participant}
+                {cleanText(participant)}
               </span>
             ))}
           </div>
@@ -412,7 +429,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                 <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-500 flex items-center justify-center text-sm font-medium shrink-0">
                   {index + 1}
                 </span>
-                <span>{item}</span>
+                <span>{cleanText(item)}</span>
               </li>
             ))}
           </ol>
@@ -431,9 +448,9 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                 key={index}
                 className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/30"
               >
-                <h4 className="font-medium text-white mb-2">{item.topic}</h4>
+                <h4 className="font-medium text-white mb-2">{cleanText(item.topic)}</h4>
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  {item.summary}
+                  {cleanText(item.summary)}
                 </p>
                 {item.decisions.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-slate-700/50">
@@ -447,7 +464,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                           className="flex items-start gap-2 text-sm text-slate-300"
                         >
                           <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-                          <span>{decision}</span>
+                          <span>{cleanText(decision)}</span>
                         </li>
                       ))}
                     </ul>
@@ -472,7 +489,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                 className="flex items-start gap-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg"
               >
                 <CheckCircle2 className="w-5 h-5 text-emerald-500 mt-0.5 shrink-0" />
-                <span className="text-slate-200">{conclusion}</span>
+                <span className="text-slate-200">{cleanText(conclusion)}</span>
               </li>
             ))}
           </ul>
@@ -492,7 +509,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
                 className="flex items-start gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg"
               >
                 <ArrowRight className="w-5 h-5 text-blue-500 mt-0.5 shrink-0" />
-                <span className="text-slate-200">{step}</span>
+                <span className="text-slate-200">{cleanText(step)}</span>
               </li>
             ))}
           </ul>

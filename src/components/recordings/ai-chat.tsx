@@ -28,35 +28,32 @@ const SUGGESTED_QUESTIONS = [
   "Были ли назначены какие-то задачи?",
 ];
 
-// Simple markdown parser for chat messages
-function parseMarkdown(text: string): React.ReactNode[] {
-  const parts: React.ReactNode[] = [];
-  // Split by bold markers **text**
-  const regex = /\*\*([^*]+)\*\*/g;
-  let lastIndex = 0;
-  let match;
-  let keyIndex = 0;
+// Clean and format text, removing markdown artifacts
+function cleanMarkdown(text: string): React.ReactNode[] {
+  // Remove common markdown symbols and clean up text
+  let cleaned = text
+    // Remove headers (# ## ###)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold and italic markers but keep text
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove bullet points at start of lines
+    .replace(/^[\-\*•]\s+/gm, '• ')
+    // Remove numbered lists formatting but keep numbers
+    .replace(/^\d+\.\s+/gm, (match) => match)
+    // Remove code blocks markers
+    .replace(/```[a-z]*\n?/g, '')
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove blockquotes
+    .replace(/^>\s+/gm, '')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
-  while ((match = regex.exec(text)) !== null) {
-    // Add text before the match
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index));
-    }
-    // Add the bold text
-    parts.push(
-      <span key={keyIndex++} className="font-semibold">
-        {match[1]}
-      </span>
-    );
-    lastIndex = regex.lastIndex;
-  }
-
-  // Add remaining text
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex));
-  }
-
-  return parts.length > 0 ? parts : [text];
+  return [cleaned];
 }
 
 export function AIChat({
@@ -241,7 +238,7 @@ export function AIChat({
                   )}
                 >
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {message.role === "assistant" ? parseMarkdown(message.content) : message.content}
+                    {message.role === "assistant" ? cleanMarkdown(message.content) : message.content}
                   </p>
                 </div>
                 {message.role === "user" && (
