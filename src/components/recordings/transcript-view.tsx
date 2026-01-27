@@ -1,11 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MessageSquare, List, AlignJustify } from "lucide-react";
+import {
+  MessageSquare,
+  List,
+  AlignJustify,
+  Pencil,
+  X,
+  Check,
+  Download,
+  Loader2,
+} from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import type { Transcript, TranscriptSegment, Speaker } from "@/types/database";
 
-type ViewMode = "segments" | "fulltext";
+type ViewMode = "segments" | "fulltext" | "edit";
 
 // Speaker color palette
 const SPEAKER_COLORS = [
@@ -24,6 +33,7 @@ interface TranscriptViewProps {
   speakers: Speaker[];
   currentTime?: number;
   onSegmentClick?: (startTime: number) => void;
+  recordingId?: string;
 }
 
 export function TranscriptView({
@@ -31,6 +41,7 @@ export function TranscriptView({
   speakers,
   currentTime = 0,
   onSegmentClick,
+  recordingId,
 }: TranscriptViewProps) {
   // Create speaker name map
   const speakerMap = useMemo(() => {
@@ -66,6 +77,78 @@ export function TranscriptView({
   };
 
   const [viewMode, setViewMode] = useState<ViewMode>("segments");
+  const [editedText, setEditedText] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Generate full text for editing
+  const fullTextForEdit = useMemo(() => {
+    if (!transcript) return "";
+    if (transcript.full_text) return transcript.full_text;
+    return transcript.segments
+      .map((s) => `[${getSpeakerName(s.speaker)}]: ${s.text}`)
+      .join("\n\n");
+  }, [transcript, speakerMap]);
+
+  const handleStartEdit = () => {
+    setEditedText(fullTextForEdit);
+    setViewMode("edit");
+  };
+
+  const handleCancelEdit = () => {
+    setEditedText("");
+    setViewMode("segments");
+  };
+
+  const handleExportDocx = async (useEdited: boolean = false) => {
+    if (!recordingId) return;
+
+    setIsExporting(true);
+    try {
+      let response: Response;
+
+      if (useEdited && editedText) {
+        // POST with edited content
+        response = await fetch(`/api/recordings/${recordingId}/export/docx`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "transcript", content: editedText }),
+        });
+      } else {
+        // GET original transcript
+        response = await fetch(
+          `/api/recordings/${recordingId}/export/docx?type=transcript`
+        );
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to export");
+      }
+
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let filename = "transcript.docx";
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+        if (match) {
+          filename = decodeURIComponent(match[1].replace(/["']/g, ""));
+        }
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось экспортировать");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   if (!transcript || !transcript.segments || transcript.segments.length === 0) {
     return (
@@ -81,38 +164,100 @@ export function TranscriptView({
 
   return (
     <div className="space-y-4">
-      {/* View mode toggle */}
-      <div className="flex items-center justify-end gap-1 p-1 bg-slate-800/50 rounded-lg w-fit ml-auto">
-        <button
-          onClick={() => setViewMode("segments")}
-          className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-            viewMode === "segments"
-              ? "bg-slate-700 text-white"
-              : "text-slate-400 hover:text-white"
-          )}
-          title="Показать сегменты по спикерам"
-        >
-          <List className="w-4 h-4" />
-          Сегменты
-        </button>
-        <button
-          onClick={() => setViewMode("fulltext")}
-          className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-            viewMode === "fulltext"
-              ? "bg-slate-700 text-white"
-              : "text-slate-400 hover:text-white"
-          )}
-          title="Показать сплошной текст"
-        >
-          <AlignJustify className="w-4 h-4" />
-          Текст
-        </button>
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {/* View mode toggle */}
+        <div className="flex items-center gap-1 p-1 bg-slate-800/50 rounded-lg">
+          <button
+            onClick={() => setViewMode("segments")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              viewMode === "segments"
+                ? "bg-slate-700 text-white"
+                : "text-slate-400 hover:text-white"
+            )}
+            title="Показать сегменты по спикерам"
+          >
+            <List className="w-4 h-4" />
+            Сегменты
+          </button>
+          <button
+            onClick={() => setViewMode("fulltext")}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              viewMode === "fulltext"
+                ? "bg-slate-700 text-white"
+                : "text-slate-400 hover:text-white"
+            )}
+            title="Показать сплошной текст"
+          >
+            <AlignJustify className="w-4 h-4" />
+            Текст
+          </button>
+          <button
+            onClick={handleStartEdit}
+            className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              viewMode === "edit"
+                ? "bg-slate-700 text-white"
+                : "text-slate-400 hover:text-white"
+            )}
+            title="Редактировать транскрипт"
+          >
+            <Pencil className="w-4 h-4" />
+            Редактировать
+          </button>
+        </div>
+
+        {/* Export button */}
+        {recordingId && viewMode !== "edit" && (
+          <button
+            onClick={() => handleExportDocx(false)}
+            disabled={isExporting}
+            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {isExporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
+            Экспорт DOCX
+          </button>
+        )}
       </div>
 
       {/* Content based on view mode */}
-      {viewMode === "segments" ? (
+      {viewMode === "edit" ? (
+        <div className="space-y-4">
+          <textarea
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            className="w-full h-[500px] p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            placeholder="Редактируйте транскрипт..."
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleExportDocx(true)}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              Экспортировать отредактированный
+            </button>
+            <button
+              onClick={handleCancelEdit}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+            >
+              <X className="w-4 h-4" />
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : viewMode === "segments" ? (
         <div className="space-y-3">
           {transcript.segments.map((segment, index) => (
             <TranscriptSegmentItem
