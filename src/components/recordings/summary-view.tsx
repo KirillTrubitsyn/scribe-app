@@ -13,6 +13,7 @@ import {
   Loader2,
   Save,
   Check,
+  Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
@@ -52,6 +53,7 @@ export function SummaryView({ artifacts, recordingId, onUpdate, onAIAnalysis, is
   const [isExporting, setIsExporting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "shared">("idle");
 
   // Find the summary artifact
   const summaryArtifact = artifacts.find((a) => a.type === "summary");
@@ -149,6 +151,33 @@ export function SummaryView({ artifacts, recordingId, onUpdate, onAIAnalysis, is
     }
 
     return text;
+  };
+
+  const handleShare = async () => {
+    const textToShare = generateEditText();
+    if (!textToShare) return;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Саммари",
+          text: textToShare,
+        });
+        setShareStatus("shared");
+        setTimeout(() => setShareStatus("idle"), 2000);
+        return;
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(textToShare);
+      setShareStatus("copied");
+      setTimeout(() => setShareStatus("idle"), 2000);
+    } catch {
+      alert("Не удалось скопировать текст");
+    }
   };
 
   const handleStartEdit = () => {
@@ -315,6 +344,27 @@ export function SummaryView({ artifacts, recordingId, onUpdate, onAIAnalysis, is
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex items-center justify-end gap-2">
+        <button
+          onClick={handleShare}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+            shareStatus !== "idle"
+              ? "bg-emerald-500 text-white"
+              : "bg-slate-700 hover:bg-slate-600 text-white"
+          )}
+        >
+          {shareStatus !== "idle" ? (
+            <>
+              <Check className="w-4 h-4" />
+              {shareStatus === "copied" ? "Скопировано" : "Отправлено"}
+            </>
+          ) : (
+            <>
+              <Share2 className="w-4 h-4" />
+              Поделиться
+            </>
+          )}
+        </button>
         <button
           onClick={handleStartEdit}
           className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
