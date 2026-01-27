@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
-import type { Transcript, Artifact } from "@/types/database";
+import type { Transcript, Artifact, Speaker } from "@/types/database";
 
 // ============================================
 // Types
@@ -86,13 +86,23 @@ async function generateContent(genAI: GoogleGenAI, prompt: string): Promise<stri
   return response.text || "";
 }
 
-function prepareTranscriptForAnalysis(transcript: Transcript): string {
+function prepareTranscriptForAnalysis(transcript: Transcript, speakers?: Speaker[]): string {
   if (transcript.segments && transcript.segments.length > 0) {
+    // Build speaker name mapping
+    const speakerNameMap = new Map<string, string>();
+    if (speakers) {
+      for (const speaker of speakers) {
+        const key = `Speaker ${speaker.speaker_index}`;
+        speakerNameMap.set(key, speaker.name || key);
+      }
+    }
+
     const formattedSegments = transcript.segments.map((segment) => {
+      const speakerName = speakerNameMap.get(segment.speaker) || segment.speaker;
       const mins = Math.floor(segment.start / 60);
       const secs = Math.floor(segment.start % 60);
       const timestamp = `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-      return `[${timestamp}] ${segment.speaker}: ${segment.text}`;
+      return `[${timestamp}] ${speakerName}: ${segment.text}`;
     });
     return formattedSegments.join("\n\n");
   }
@@ -180,12 +190,20 @@ export async function POST(
 
   const transcript = transcriptData as Transcript;
 
+  // 4. Fetch speakers for name mapping
+  const { data: speakersData } = await adminClient
+    .from("speakers")
+    .select("*")
+    .eq("recording_id", recordingId);
+
+  const speakers = (speakersData || []) as Speaker[];
+
   try {
-    // 4. Generate protocol
+    // 5. Generate protocol
     console.log(`[Protocol] Generating protocol for recording ${recordingId}`);
 
     const genAI = getGeminiClient();
-    const fullText = prepareTranscriptForAnalysis(transcript);
+    const fullText = prepareTranscriptForAnalysis(transcript, speakers);
 
     if (!fullText || fullText.length < 50) {
       return NextResponse.json(
@@ -204,7 +222,7 @@ export async function POST(
       );
     }
 
-    // 5. Save protocol as artifact
+    // 6. Save protocol as artifact
     // First, delete existing protocol artifact
     await adminClient
       .from("artifacts")
