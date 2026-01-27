@@ -61,6 +61,10 @@ const PAUSE_THRESHOLD_SECONDS = 2.0
 const POLL_INTERVAL_MS = 10000
 const MAX_POLL_TIME_MS = 60 * 60 * 1000 // 1 hour
 
+// Gemini File API configuration
+const GEMINI_FILE_POLL_INTERVAL_MS = 2000
+const GEMINI_FILE_MAX_POLL_TIME_MS = 10 * 60 * 1000 // 10 minutes
+
 function getGoogleCredentials(): { projectId: string; credentials: object } {
   const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
 
@@ -702,16 +706,35 @@ async function uploadToGeminiFileAPI(
 
     console.log(`[Transcription] File uploaded: ${uploadResult.name}, state: ${uploadResult.state}`)
 
-    // Wait for file to be processed
+    // Wait for file to be processed with timeout
     let file = uploadResult
+    const fileUploadStartTime = Date.now()
+    let lastFileProgressLog = 0
+
     while (file.state === 'PROCESSING') {
+      const elapsed = Date.now() - fileUploadStartTime
+
+      // Check timeout
+      if (elapsed > GEMINI_FILE_MAX_POLL_TIME_MS) {
+        const minutes = Math.round(elapsed / 60000)
+        console.error(`[Transcription] Gemini File API timeout after ${minutes} minutes`)
+        throw new Error('Превышено время загрузки файла в Gemini. Попробуйте загрузить файл меньшего размера.')
+      }
+
+      // Log progress periodically (every 30 seconds)
+      if (elapsed - lastFileProgressLog >= 30000) {
+        const minutes = Math.round(elapsed / 60000)
+        console.log(`[Transcription] File still processing... (${minutes} min elapsed)`)
+        lastFileProgressLog = elapsed
+      }
+
       console.log('[Transcription] Waiting for file processing...')
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await new Promise(resolve => setTimeout(resolve, GEMINI_FILE_POLL_INTERVAL_MS))
       file = await genAI.files.get({ name: file.name! })
     }
 
     if (file.state === 'FAILED') {
-      throw new Error('File processing failed')
+      throw new Error('Не удалось обработать аудиофайл в Gemini. Попробуйте другой формат файла.')
     }
 
     console.log(`[Transcription] File ready: ${file.uri}`)
