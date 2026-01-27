@@ -360,9 +360,9 @@ export default function RecordingDetailPage({
         <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
 
         {/* Main content with sidebar */}
-        <div className="mt-6 flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
+        <div className="mt-6 flex-1 min-h-0 flex flex-col lg:flex-row gap-6">
           {/* Left column - Player, Tabs, Content */}
-          <div className="flex flex-col gap-6 min-w-0 min-h-0">
+          <div className="flex-1 flex flex-col gap-6 min-w-0 min-h-0">
             {/* Audio Player */}
             {recording.audioUrl ? (
               <AudioPlayer
@@ -449,7 +449,7 @@ export default function RecordingDetailPage({
           </div>
 
           {/* Right column - Sidebar */}
-          <aside className="lg:sticky lg:top-8 lg:self-start space-y-6">
+          <aside className="lg:w-80 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-6">
             <DetailSidebar
               recording={recording}
               transcript={transcript}
