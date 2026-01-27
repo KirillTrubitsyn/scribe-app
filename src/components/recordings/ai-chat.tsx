@@ -180,7 +180,7 @@ export function AIChat({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-220px)] min-h-[500px] bg-slate-800/30 rounded-xl border border-slate-700/30">
+    <div className="flex flex-col h-full bg-slate-800/30 rounded-xl border border-slate-700/30">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-2">
@@ -277,7 +277,7 @@ export function AIChat({
       )}
 
       {/* Input */}
-      <div className="p-3 border-t border-slate-700/50">
+      <div className="p-3 border-t border-slate-700/50 shrink-0">
         <div className="flex gap-2 items-center">
           <input
             type="text"
@@ -310,9 +310,6 @@ export function AIChat({
             )}
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-1.5 pl-1">
-          Enter для отправки
-        </p>
       </div>
     </div>
   );

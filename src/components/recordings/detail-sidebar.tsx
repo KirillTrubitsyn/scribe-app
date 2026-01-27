@@ -5,7 +5,6 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { Recording, Transcript, Artifact } from "@/types/database";
 
 interface DetailSidebarProps {
@@ -28,92 +27,41 @@ export function DetailSidebar({
   const hasSummary = artifacts.some((a) => a.type === "summary");
 
   return (
-    <div className="space-y-6">
-      {/* Export Section */}
-      <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30">
-        <h3 className="text-lg font-medium text-white mb-4">Экспорт</h3>
-
-        <div className="space-y-2">
-          <SidebarButton
-            onClick={onDownloadAudio}
-            icon={<Download className="w-4 h-4" />}
-            disabled={recording.status === "uploading"}
-          >
-            Скачать аудио
-          </SidebarButton>
-        </div>
-
-        <p className="text-xs text-slate-500 mt-3">
-          Экспорт в DOCX доступен в каждой вкладке (Транскрипт, Резюме, Протокол)
-        </p>
-      </div>
+    <div className="space-y-4">
+      {/* Compact Audio Export Button */}
+      <button
+        onClick={onDownloadAudio}
+        disabled={recording.status === "uploading"}
+        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Download className="w-4 h-4" />
+        <span>Скачать аудио</span>
+      </button>
 
       {/* AI Analysis Section */}
       {onAIAnalysis && !hasSummary && recording.status === "ready" && (
-        <div className="bg-gradient-to-br from-orange-500/10 to-amber-500/10 rounded-xl p-5 border border-orange-500/20">
-          <div className="flex items-center gap-2 mb-3">
-            <Sparkles className="w-5 h-5 text-orange-500" />
-            <h3 className="text-lg font-medium text-white">AI-анализ</h3>
+        <div className="bg-gradient-to-br from-orange-500/10 to-amber-500/10 rounded-xl p-4 border border-orange-500/20">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-orange-500" />
+            <span className="text-sm font-medium text-white">AI-анализ</span>
           </div>
-          <p className="text-sm text-slate-400 mb-4">
-            Получите краткое содержание, ключевые решения и список задач
+          <p className="text-xs text-slate-400 mb-3">
+            Краткое содержание, решения и задачи
           </p>
-          <SidebarButton
+          <button
             onClick={onAIAnalysis}
-            icon={
-              isAnalyzing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Sparkles className="w-4 h-4" />
-              )
-            }
-            variant="primary"
             disabled={isAnalyzing}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-orange-500/20"
           >
-            {isAnalyzing ? "Анализируем..." : "Запустить анализ"}
-          </SidebarButton>
+            {isAnalyzing ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Sparkles className="w-4 h-4" />
+            )}
+            {isAnalyzing ? "Анализируем..." : "Запустить"}
+          </button>
         </div>
       )}
-
     </div>
-  );
-}
-
-interface SidebarButtonProps {
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  variant?: "default" | "primary" | "danger";
-  disabled?: boolean;
-  title?: string;
-}
-
-function SidebarButton({
-  onClick,
-  icon,
-  children,
-  variant = "default",
-  disabled = false,
-  title,
-}: SidebarButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className={cn(
-        "w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
-        variant === "default" &&
-          "bg-slate-700/50 text-slate-300 hover:bg-slate-700 hover:text-white",
-        variant === "primary" &&
-          "bg-orange-500 text-white hover:bg-orange-400 shadow-lg shadow-orange-500/20",
-        variant === "danger" &&
-          "bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20"
-      )}
-    >
-      {icon}
-      <span>{children}</span>
-    </button>
   );
 }
