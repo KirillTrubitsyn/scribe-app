@@ -28,6 +28,37 @@ const SUGGESTED_QUESTIONS = [
   "Были ли назначены какие-то задачи?",
 ];
 
+// Simple markdown parser for chat messages
+function parseMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // Split by bold markers **text**
+  const regex = /\*\*([^*]+)\*\*/g;
+  let lastIndex = 0;
+  let match;
+  let keyIndex = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Add the bold text
+    parts.push(
+      <span key={keyIndex++} className="font-semibold">
+        {match[1]}
+      </span>
+    );
+    lastIndex = regex.lastIndex;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
 export function AIChat({
   recordingId,
   hasTranscript,
@@ -40,7 +71,6 @@ export function AIChat({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Load chat when currentChatId changes
   useEffect(() => {
@@ -67,14 +97,6 @@ export function AIChat({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Auto-resize textarea
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
-    }
-  }, [input]);
 
   // Save messages to storage
   const saveMessages = useCallback(
@@ -138,13 +160,6 @@ export function AIChat({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  };
-
   const handleNewChat = () => {
     const newSession = createChatSession(recordingId);
     setMessages([]);
@@ -165,7 +180,7 @@ export function AIChat({
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-300px)] min-h-[400px] bg-slate-800/30 rounded-xl border border-slate-700/30">
+    <div className="flex flex-col h-[calc(100vh-220px)] min-h-[500px] bg-slate-800/30 rounded-xl border border-slate-700/30">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-2">
@@ -226,7 +241,7 @@ export function AIChat({
                   )}
                 >
                   <p className="whitespace-pre-wrap text-sm leading-relaxed">
-                    {message.content}
+                    {message.role === "assistant" ? parseMarkdown(message.content) : message.content}
                   </p>
                 </div>
                 {message.role === "user" && (
@@ -262,23 +277,27 @@ export function AIChat({
       )}
 
       {/* Input */}
-      <div className="p-4 border-t border-slate-700/50">
-        <div className="flex gap-2">
-          <textarea
-            ref={inputRef}
+      <div className="p-3 border-t border-slate-700/50">
+        <div className="flex gap-2 items-center">
+          <input
+            type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
             placeholder="Задайте вопрос..."
-            rows={2}
-            className="flex-1 px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50 resize-none"
+            className="flex-1 px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
             disabled={isLoading}
           />
           <button
             onClick={() => sendMessage()}
             disabled={!input.trim() || isLoading}
             className={cn(
-              "px-4 py-2.5 rounded-xl font-medium transition-colors flex items-center gap-2",
+              "p-2.5 rounded-xl font-medium transition-colors flex items-center justify-center",
               input.trim() && !isLoading
                 ? "bg-orange-500 hover:bg-orange-600 text-white"
                 : "bg-slate-700/50 text-slate-500 cursor-not-allowed"
@@ -291,8 +310,8 @@ export function AIChat({
             )}
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-2">
-          Shift+Enter для новой строки
+        <p className="text-xs text-slate-500 mt-1.5 pl-1">
+          Enter для отправки
         </p>
       </div>
     </div>

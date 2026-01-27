@@ -14,6 +14,7 @@ import {
   Download,
   Pencil,
   X,
+  Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
@@ -22,6 +23,7 @@ interface ProtocolViewProps {
   recordingId: string;
   artifacts: Artifact[];
   hasTranscript: boolean;
+  onUpdate?: () => void;
 }
 
 interface ProtocolData {
@@ -38,13 +40,14 @@ interface ProtocolData {
   next_steps: string[];
 }
 
-export function ProtocolView({ recordingId, artifacts, hasTranscript }: ProtocolViewProps) {
+export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }: ProtocolViewProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [protocol, setProtocol] = useState<ProtocolData | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Parse protocol from artifacts
   const existingProtocol = useMemo(() => {
@@ -151,6 +154,31 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
   const handleCancelEdit = () => {
     setEditedContent("");
     setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!editedContent.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/artifacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "protocol", content: editedContent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save");
+      }
+
+      setIsEditing(false);
+      onUpdate?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось сохранить");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleExportDocx = async (useEdited: boolean = false) => {
@@ -272,16 +300,28 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript }: Protocol
         />
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Сохранить
+          </button>
+          <button
             onClick={() => handleExportDocx(true)}
             disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Download className="w-4 h-4" />
             )}
-            Экспортировать отредактированный
+            Экспорт DOCX
           </button>
           <button
             onClick={handleCancelEdit}
