@@ -357,7 +357,11 @@ export default function RecordingDetailPage({
     <div className="p-4 md:p-8 flex-1 flex flex-col min-h-0">
       <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0">
         {/* Header */}
-        <DetailHeader recording={recording} speakers={recording.speakers ?? []} />
+        <DetailHeader
+          recording={recording}
+          speakers={recording.speakers ?? []}
+          onDownloadAudio={handleDownloadAudio}
+        />
 
         {/* Main content with sidebar */}
         <div className="mt-6 flex-1 min-h-0 flex flex-col lg:flex-row gap-6">
@@ -375,21 +379,21 @@ export default function RecordingDetailPage({
             )}
 
             {/* Tabs */}
-            <div className="border-b border-slate-700/50 shrink-0">
-              <div className="flex gap-1">
+            <div className="border-b border-slate-700/50 shrink-0 -mx-4 px-4 overflow-x-auto scrollbar-hide">
+              <div className="flex gap-1 min-w-max">
                 {TABS.map((tab) => (
                   <button
                     key={tab.value}
                     onClick={() => setActiveTab(tab.value)}
                     className={cn(
-                      "flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px",
+                      "flex items-center gap-1.5 px-3 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap",
                       activeTab === tab.value
                         ? "text-orange-500 border-orange-500"
                         : "text-slate-400 border-transparent hover:text-white hover:border-slate-600"
                     )}
                   >
                     {tab.icon}
-                    {tab.label}
+                    <span className="hidden sm:inline">{tab.label}</span>
                   </button>
                 ))}
               </div>
@@ -452,14 +456,12 @@ export default function RecordingDetailPage({
           <aside className="lg:w-60 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-4">
             <DetailSidebar
               recording={recording}
-              transcript={transcript}
               artifacts={recording.artifacts ?? []}
-              onDownloadAudio={handleDownloadAudio}
               onAIAnalysis={handleAIAnalysis}
               isAnalyzing={isAnalyzing}
             />
-            {/* Chat History */}
-            {transcript && (
+            {/* Chat History - only visible in chat tab */}
+            {transcript && activeTab === "chat" && (
               <ChatHistory
                 recordingId={recording.id}
                 currentChatId={currentChatId}
