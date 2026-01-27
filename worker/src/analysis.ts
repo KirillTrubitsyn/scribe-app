@@ -330,7 +330,8 @@ function prepareTranscriptForAnalysis(
     if (speakers) {
       for (const speaker of speakers) {
         const key = `Speaker ${speaker.speaker_index}`
-        speakerNameMap.set(key, speaker.name || key)
+        // Use custom name or Russian label for consistency
+        speakerNameMap.set(key, speaker.name || `Спикер ${speaker.speaker_index}`)
       }
     }
 
