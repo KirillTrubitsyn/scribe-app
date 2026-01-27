@@ -447,18 +447,35 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
     return result;
   }, [transcript.segments, hasSingleSpeaker]);
 
+  // Split text into paragraphs by word count
+  const splitTextIntoParagraphs = (text: string, wordsPerParagraph: number = 50): string[] => {
+    const words = text.split(/\s+/);
+    const paragraphs: string[] = [];
+
+    for (let i = 0; i < words.length; i += wordsPerParagraph) {
+      paragraphs.push(words.slice(i, i + wordsPerParagraph).join(' '));
+    }
+
+    return paragraphs;
+  };
+
   // If we have full_text, show it with line breaks preserved
   if (transcript.full_text) {
-    // Split into paragraphs and add proper spacing
-    const textParagraphs = transcript.full_text
+    // First try to split by natural paragraph breaks
+    let textParagraphs = transcript.full_text
       .split(/\n\n+/)
       .filter(p => p.trim());
+
+    // If only one paragraph and it's long, split by word count
+    if (textParagraphs.length === 1 && textParagraphs[0].split(/\s+/).length > 60) {
+      textParagraphs = splitTextIntoParagraphs(textParagraphs[0], 50);
+    }
 
     return (
       <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
         <div className="text-slate-200 leading-relaxed text-base space-y-4">
           {textParagraphs.map((paragraph, idx) => (
-            <p key={idx} className="whitespace-pre-wrap indent-4 first:indent-0">
+            <p key={idx}>
               {paragraph.trim()}
             </p>
           ))}
