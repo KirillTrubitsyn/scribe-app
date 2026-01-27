@@ -377,16 +377,20 @@ interface FullTextViewProps {
 function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }: FullTextViewProps) {
   // Create speaker name map
   const speakerMap = useMemo(() => {
-    const map = new Map<string, string>();
-    speakers.forEach((s) => {
+    const map = new Map<string, { name: string; colorIndex: number }>();
+    speakers.forEach((s, index) => {
       const key = `Speaker ${s.speaker_index}`;
-      map.set(key, s.name || key);
+      map.set(key, { name: s.name || key, colorIndex: index % SPEAKER_COLORS.length });
     });
     return map;
   }, [speakers]);
 
   const getSpeakerName = (speaker: string): string => {
-    return speakerMap.get(speaker) || speaker;
+    return speakerMap.get(speaker)?.name || speaker;
+  };
+
+  const getColorIndex = (speaker: string): number => {
+    return speakerMap.get(speaker)?.colorIndex ?? 0;
   };
 
   // Find current segment for highlighting
@@ -394,30 +398,64 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
     s => currentTime >= s.start && currentTime < s.end
   );
 
-  // Group consecutive segments by same speaker
-  const groupedSegments = useMemo(() => {
-    const groups: { speaker: string; segments: { text: string; start: number; index: number }[] }[] = [];
-    let currentGroup: { speaker: string; segments: { text: string; start: number; index: number }[] } | null = null;
+  // Check if there's only one speaker
+  const uniqueSpeakers = useMemo(() => {
+    return new Set(transcript.segments.map(s => s.speaker));
+  }, [transcript.segments]);
+
+  const hasSingleSpeaker = uniqueSpeakers.size <= 1;
+
+  // Group segments into paragraphs with logical breaks
+  const paragraphs = useMemo(() => {
+    const result: Array<{
+      speaker: string;
+      segments: Array<{ text: string; start: number; index: number }>;
+    }> = [];
+
+    let currentParagraph: typeof result[0] | null = null;
+    let sentenceCount = 0;
+    const SENTENCES_PER_PARAGRAPH = 4; // Break every ~4 sentences for readability
 
     transcript.segments.forEach((segment, index) => {
-      if (!currentGroup || currentGroup.speaker !== segment.speaker) {
-        currentGroup = { speaker: segment.speaker, segments: [] };
-        groups.push(currentGroup);
+      const isNewSpeaker = !currentParagraph || currentParagraph.speaker !== segment.speaker;
+
+      // Count sentences in this segment (rough estimate)
+      const sentencesInSegment = (segment.text.match(/[.!?]+/g) || []).length || 1;
+
+      // Check if we should start a new paragraph
+      const shouldBreak = isNewSpeaker ||
+        (hasSingleSpeaker && sentenceCount >= SENTENCES_PER_PARAGRAPH);
+
+      if (shouldBreak) {
+        currentParagraph = { speaker: segment.speaker, segments: [] };
+        result.push(currentParagraph);
+        sentenceCount = 0;
       }
-      currentGroup.segments.push({ text: segment.text, start: segment.start, index });
+
+      currentParagraph!.segments.push({
+        text: segment.text,
+        start: segment.start,
+        index
+      });
+      sentenceCount += sentencesInSegment;
     });
 
-    return groups;
-  }, [transcript.segments]);
+    return result;
+  }, [transcript.segments, hasSingleSpeaker]);
 
   // If we have full_text, show it with line breaks preserved
   if (transcript.full_text) {
+    // Split into paragraphs and add proper spacing
+    const textParagraphs = transcript.full_text
+      .split(/\n\n+/)
+      .filter(p => p.trim());
+
     return (
       <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30">
         <div className="text-slate-200 leading-relaxed text-base space-y-4">
-          {transcript.full_text.split('\n\n').map((paragraph, idx) => (
-            <p key={idx} className="whitespace-pre-wrap">
-              {paragraph}
+          {textParagraphs.map((paragraph, idx) => (
+            <p key={idx} className="whitespace-pre-wrap indent-4 first:indent-0">
+              {paragraph.trim()}
             </p>
           ))}
         </div>
@@ -425,18 +463,13 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
     );
   }
 
-  // Show segments grouped by speaker with visual breaks
-  return (
-    <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30 space-y-4">
-      {groupedSegments.map((group, groupIndex) => (
-        <div key={groupIndex} className="space-y-1">
-          {/* Speaker label */}
-          <span className="text-xs text-slate-500 font-medium">
-            {getSpeakerName(group.speaker)}
-          </span>
-          {/* Speaker's text */}
-          <p className="text-slate-200 leading-relaxed text-base">
-            {group.segments.map((seg, segIdx) => (
+  // For single speaker - clean continuous text with paragraph breaks
+  if (hasSingleSpeaker) {
+    return (
+      <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30 space-y-4">
+        {paragraphs.map((paragraph, paragraphIndex) => (
+          <p key={paragraphIndex} className="text-slate-200 leading-relaxed text-base">
+            {paragraph.segments.map((seg, segIdx) => (
               <span
                 key={seg.index}
                 onClick={() => onSegmentClick?.(seg.start)}
@@ -447,12 +480,57 @@ function FullTextView({ transcript, speakers, currentTime = 0, onSegmentClick }:
                 title={formatDuration(seg.start)}
               >
                 {seg.text}
-                {segIdx < group.segments.length - 1 ? ' ' : ''}
+                {segIdx < paragraph.segments.length - 1 ? ' ' : ''}
               </span>
             ))}
           </p>
-        </div>
-      ))}
+        ))}
+      </div>
+    );
+  }
+
+  // Multiple speakers - show with speaker labels and color coding
+  return (
+    <div className="bg-slate-800/30 rounded-xl p-6 border border-slate-700/30 space-y-5">
+      {paragraphs.map((paragraph, paragraphIndex) => {
+        const colorIndex = getColorIndex(paragraph.speaker);
+        const color = SPEAKER_COLORS[colorIndex];
+
+        return (
+          <div key={paragraphIndex} className={cn(
+            "pl-4 border-l-2",
+            color.border
+          )}>
+            {/* Speaker label */}
+            <div className="flex items-center gap-2 mb-2">
+              <div className={cn("w-2 h-2 rounded-full", color.dot)} />
+              <span className={cn("text-sm font-medium", color.text)}>
+                {getSpeakerName(paragraph.speaker)}
+              </span>
+              <span className="text-xs text-slate-500">
+                {formatDuration(paragraph.segments[0].start)}
+              </span>
+            </div>
+            {/* Speaker's text */}
+            <p className="text-slate-200 leading-relaxed text-base">
+              {paragraph.segments.map((seg, segIdx) => (
+                <span
+                  key={seg.index}
+                  onClick={() => onSegmentClick?.(seg.start)}
+                  className={cn(
+                    "cursor-pointer transition-colors hover:text-orange-400",
+                    currentSegmentIndex === seg.index && "bg-orange-500/20 text-orange-300 rounded px-1"
+                  )}
+                  title={formatDuration(seg.start)}
+                >
+                  {seg.text}
+                  {segIdx < paragraph.segments.length - 1 ? ' ' : ''}
+                </span>
+              ))}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 }
