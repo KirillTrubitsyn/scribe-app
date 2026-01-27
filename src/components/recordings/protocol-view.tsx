@@ -393,34 +393,36 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
             <span>{protocol.date}</span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleShare}
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+              "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
               shareStatus !== "idle"
                 ? "bg-emerald-500 text-white"
                 : "bg-slate-700 hover:bg-slate-600 text-white"
             )}
+            title="Поделиться"
           >
             {shareStatus !== "idle" ? (
               <>
                 <Check className="w-4 h-4" />
-                {shareStatus === "copied" ? "Скопировано" : "Отправлено"}
+                <span className="hidden sm:inline">{shareStatus === "copied" ? "Скопировано" : "Отправлено"}</span>
               </>
             ) : (
               <>
                 <Share2 className="w-4 h-4" />
-                Поделиться
+                <span className="hidden sm:inline">Поделиться</span>
               </>
             )}
           </button>
           <button
             onClick={handleStartEdit}
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors"
+            title="Редактировать"
           >
             <Pencil className="w-4 h-4" />
-            Редактировать
+            <span className="hidden sm:inline">Редактировать</span>
           </button>
           <button
             onClick={generateProtocol}
@@ -433,7 +435,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
           <button
             onClick={() => handleExportDocx(false)}
             disabled={isExporting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
             title="Экспорт DOCX"
           >
             {isExporting ? (
@@ -441,7 +443,7 @@ export function ProtocolView({ recordingId, artifacts, hasTranscript, onUpdate }
             ) : (
               <Download className="w-4 h-4" />
             )}
-            Экспорт DOCX
+            <span className="hidden sm:inline">DOCX</span>
           </button>
         </div>
       </div>

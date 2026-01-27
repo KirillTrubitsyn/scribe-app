@@ -2,6 +2,9 @@ import { Storage } from '@google-cloud/storage'
 import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import type { TranscriptSegment } from './supabase.js'
 import type { TranscriptData, SpeakerData } from './webhook.js'
+import { writeFileSync, unlinkSync, mkdtempSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
 // ============================================
 // Types
@@ -29,6 +32,10 @@ interface GeminiTranscriptResponse {
 // ============================================
 // Configuration
 // ============================================
+
+// Files larger than 4MB should use File API instead of inline data
+// (base64 adds ~33% overhead, so 4MB base64 ≈ 3MB raw)
+const INLINE_DATA_LIMIT_BYTES = 4 * 1024 * 1024
 
 function getGoogleCredentials(): { projectId: string; credentials: object } {
   const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
@@ -141,16 +148,34 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
     console.log('[Transcription] Sending to Gemini 3 Flash...')
     const genAI = getGeminiClient()
 
+    // For large files, use File API instead of inline data
+    const useFileAPI = audioData.size > INLINE_DATA_LIMIT_BYTES
+    let audioContent: object
+
+    if (useFileAPI) {
+      console.log(`[Transcription] File is ${(audioData.size / 1024 / 1024).toFixed(2)}MB, using File API`)
+      const fileUri = await uploadToGeminiFileAPI(genAI, audioData)
+      audioContent = {
+        fileData: {
+          fileUri,
+          mimeType: audioData.mimeType,
+        },
+      }
+    } else {
+      console.log(`[Transcription] File is ${(audioData.size / 1024 / 1024).toFixed(2)}MB, using inline data`)
+      audioContent = {
+        inlineData: {
+          mimeType: audioData.mimeType,
+          data: audioData.base64,
+        },
+      }
+    }
+
     const result = await genAI.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: [
         { text: TRANSCRIPTION_PROMPT },
-        {
-          inlineData: {
-            mimeType: audioData.mimeType,
-            data: audioData.base64,
-          },
-        },
+        audioContent,
       ],
       config: {
         temperature: 0,
@@ -224,6 +249,7 @@ export async function transcribeAudio(gcsUri: string): Promise<TranscriptionResu
 
 interface AudioData {
   size: number
+  buffer: Buffer
   base64: string
   mimeType: string
 }
@@ -253,6 +279,7 @@ async function downloadFromGcs(gcsUri: string): Promise<AudioData> {
 
   return {
     size: buffer.length,
+    buffer,
     base64,
     mimeType,
   }
@@ -272,6 +299,72 @@ function getMimeType(filePath: string): string {
   }
 
   return mimeTypes[ext || ''] || 'audio/mpeg'
+}
+
+function getExtensionFromMimeType(mimeType: string): string {
+  const extensions: Record<string, string> = {
+    'audio/mpeg': 'mp3',
+    'audio/wav': 'wav',
+    'audio/mp4': 'm4a',
+    'audio/webm': 'webm',
+    'audio/ogg': 'ogg',
+    'audio/flac': 'flac',
+    'audio/aac': 'aac',
+  }
+  return extensions[mimeType] || 'mp3'
+}
+
+// ============================================
+// File API Upload (for large files)
+// ============================================
+
+async function uploadToGeminiFileAPI(
+  genAI: GoogleGenAI,
+  audioData: AudioData
+): Promise<string> {
+  console.log('[Transcription] Uploading to Gemini File API...')
+
+  // Create temp file
+  const tempDir = mkdtempSync(join(tmpdir(), 'scribe-'))
+  const ext = getExtensionFromMimeType(audioData.mimeType)
+  const tempFilePath = join(tempDir, `audio.${ext}`)
+
+  try {
+    // Write buffer to temp file
+    writeFileSync(tempFilePath, audioData.buffer)
+
+    // Upload using File API
+    const uploadResult = await genAI.files.upload({
+      file: tempFilePath,
+      config: {
+        mimeType: audioData.mimeType,
+      },
+    })
+
+    console.log(`[Transcription] File uploaded: ${uploadResult.name}, state: ${uploadResult.state}`)
+
+    // Wait for file to be processed
+    let file = uploadResult
+    while (file.state === 'PROCESSING') {
+      console.log('[Transcription] Waiting for file processing...')
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      file = await genAI.files.get({ name: file.name! })
+    }
+
+    if (file.state === 'FAILED') {
+      throw new Error('File processing failed')
+    }
+
+    console.log(`[Transcription] File ready: ${file.uri}`)
+    return file.uri!
+  } finally {
+    // Clean up temp file
+    try {
+      unlinkSync(tempFilePath)
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 // ============================================
