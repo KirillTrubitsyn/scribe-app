@@ -83,7 +83,7 @@ function SpeakerCard({ speaker, color, stats, onUpdate }: SpeakerCardProps) {
   const [name, setName] = useState(speaker.name || "");
   const [isSaving, setIsSaving] = useState(false);
 
-  const displayName = speaker.name || `Спикер ${speaker.speaker_index + 1}`;
+  const displayName = speaker.name || `Спикер ${speaker.speaker_index}`;
 
   const handleSave = async () => {
     if (!onUpdate || !name.trim()) return;
@@ -141,7 +141,7 @@ function SpeakerCard({ speaker, color, stats, onUpdate }: SpeakerCardProps) {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={`Спикер ${speaker.speaker_index + 1}`}
+                  placeholder={`Спикер ${speaker.speaker_index}`}
                   className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-1.5 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
                   autoFocus
                   disabled={isSaving}
