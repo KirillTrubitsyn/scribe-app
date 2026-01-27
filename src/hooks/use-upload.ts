@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 
 export type UploadState = "idle" | "uploading" | "success" | "error";
+export type TranscriptionModel = "gemini" | "chirp";
 
 interface UploadProgress {
   state: UploadState;
@@ -21,7 +22,7 @@ interface UseUploadReturn {
   progress: number;
   error: string | null;
   recordingId: string | null;
-  upload: (file: File, title: string) => Promise<string | null>;
+  upload: (file: File, title: string, model?: TranscriptionModel) => Promise<string | null>;
   reset: () => void;
 }
 
@@ -42,7 +43,7 @@ export function useUpload(): UseUploadReturn {
     });
   }, []);
 
-  const upload = useCallback(async (file: File, title: string): Promise<string | null> => {
+  const upload = useCallback(async (file: File, title: string, model: TranscriptionModel = "gemini"): Promise<string | null> => {
     setUploadState({
       state: "uploading",
       progress: 0,
@@ -119,9 +120,15 @@ export function useUpload(): UseUploadReturn {
         progress: 95,
       }));
 
-      // Step 3: Confirm upload completion
+      // Step 3: Confirm upload completion with transcription model
       const completeResponse = await fetch(`/api/upload/${recordingId}/complete`, {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          transcription_model: model,
+        }),
       });
 
       if (!completeResponse.ok) {

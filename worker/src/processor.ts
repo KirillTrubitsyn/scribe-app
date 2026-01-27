@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { transcribeAudio } from './transcription.js'
+import { transcribeAudio, TranscriptionModel } from './transcription.js'
 import {
   sendProcessingStarted,
   sendTranscriptionCompleted,
@@ -17,6 +17,7 @@ export interface ProcessingRequest {
   callback_url?: string
   file_name: string
   file_size: number
+  transcription_model?: TranscriptionModel
 }
 
 export interface ProcessingStatus {
@@ -46,12 +47,13 @@ export function getAllActiveJobs(): ProcessingStatus[] {
 // ============================================
 
 export async function processRecording(request: ProcessingRequest): Promise<void> {
-  const { recording_id, gcs_uri } = request
+  const { recording_id, gcs_uri, transcription_model = 'gemini' } = request
   const jobId = uuidv4()
 
   console.log(`[Processor] Starting processing for recording ${recording_id}`)
   console.log(`[Processor] GCS URI: ${gcs_uri}`)
   console.log(`[Processor] Job ID: ${jobId}`)
+  console.log(`[Processor] Transcription model: ${transcription_model}`)
 
   // Track job status
   activeJobs.set(recording_id, {
@@ -71,9 +73,9 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       status: 'transcribing',
     })
 
-    // 2. Run transcription (Chirp 3 Batch)
-    console.log('[Processor] Step 2: Starting transcription')
-    const transcriptionResult = await transcribeAudio(gcs_uri)
+    // 2. Run transcription
+    console.log(`[Processor] Step 2: Starting transcription with ${transcription_model}`)
+    const transcriptionResult = await transcribeAudio(gcs_uri, transcription_model)
 
     console.log(`[Processor] Transcription completed: ${transcriptionResult.transcript.word_count} words`)
 

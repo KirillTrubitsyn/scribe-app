@@ -6,6 +6,8 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+type TranscriptionModel = "gemini" | "chirp";
+
 interface RailwayWorkerPayload {
   recording_id: string;
   gcs_uri: string;
@@ -13,11 +15,23 @@ interface RailwayWorkerPayload {
   callback_url: string;
   file_name: string;
   file_size: number;
+  transcription_model?: TranscriptionModel;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id: recordingId } = await params;
+
+    // Parse optional body for transcription model
+    let transcriptionModel: TranscriptionModel = "gemini";
+    try {
+      const body = await request.json();
+      if (body.transcription_model === "gemini" || body.transcription_model === "chirp") {
+        transcriptionModel = body.transcription_model;
+      }
+    } catch {
+      // Body is optional, default to gemini
+    }
 
     if (!recordingId) {
       return NextResponse.json(
@@ -65,7 +79,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Automatically trigger processing
-    const processingStarted = await triggerProcessing(supabase, recording);
+    const processingStarted = await triggerProcessing(supabase, recording, transcriptionModel);
 
     return NextResponse.json({
       success: true,
@@ -86,7 +100,8 @@ export async function POST(request: Request, { params }: RouteParams) {
 
 async function triggerProcessing(
   supabase: ReturnType<typeof createAdminClient>,
-  recording: Recording
+  recording: Recording,
+  transcriptionModel: TranscriptionModel = "gemini"
 ): Promise<boolean> {
   const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
@@ -129,6 +144,7 @@ async function triggerProcessing(
       callback_url: `${appUrl}/api/webhook`,
       file_name: recording.file_name,
       file_size: recording.file_size,
+      transcription_model: transcriptionModel,
     };
 
     // Send request to Railway worker
