@@ -1,19 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import {
   Download,
   FileText,
-  Trash2,
   Loader2,
-  FileAudio,
-  Clock,
-  HardDrive,
-  Calendar,
   Sparkles,
-  AlertCircle,
 } from "lucide-react";
-import { cn, formatDate, formatDuration, formatFileSize } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import type { Recording, Transcript, Artifact } from "@/types/database";
 
 interface DetailSidebarProps {
@@ -22,9 +15,7 @@ interface DetailSidebarProps {
   artifacts: Artifact[];
   onDownloadAudio: () => void;
   onDownloadDocx: () => void;
-  onDelete: () => void;
   onAIAnalysis?: () => void;
-  isDeleting?: boolean;
   isAnalyzing?: boolean;
   isExportingDocx?: boolean;
 }
@@ -35,9 +26,7 @@ export function DetailSidebar({
   artifacts,
   onDownloadAudio,
   onDownloadDocx,
-  onDelete,
   onAIAnalysis,
-  isDeleting = false,
   isAnalyzing = false,
   isExportingDocx = false,
 }: DetailSidebarProps) {
@@ -46,46 +35,6 @@ export function DetailSidebar({
 
   return (
     <div className="space-y-6">
-      {/* File Info Card */}
-      <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30">
-        <h3 className="text-lg font-medium text-white mb-4">
-          Информация о файле
-        </h3>
-
-        <dl className="space-y-3">
-          <InfoItem
-            icon={<FileAudio className="w-4 h-4" />}
-            label="Файл"
-            value={recording.file_name}
-            truncate
-          />
-          <InfoItem
-            icon={<HardDrive className="w-4 h-4" />}
-            label="Размер"
-            value={formatFileSize(recording.file_size)}
-          />
-          {recording.duration_seconds && (
-            <InfoItem
-              icon={<Clock className="w-4 h-4" />}
-              label="Длительность"
-              value={formatDuration(recording.duration_seconds)}
-            />
-          )}
-          <InfoItem
-            icon={<Calendar className="w-4 h-4" />}
-            label="Дата загрузки"
-            value={formatDate(recording.created_at)}
-          />
-          {transcript && (
-            <InfoItem
-              icon={<FileText className="w-4 h-4" />}
-              label="Слов в транскрипте"
-              value={transcript.word_count.toLocaleString("ru-RU")}
-            />
-          )}
-        </dl>
-      </div>
-
       {/* Export Section */}
       <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30">
         <h3 className="text-lg font-medium text-white mb-4">Экспорт</h3>
@@ -143,54 +92,6 @@ export function DetailSidebar({
         </div>
       )}
 
-      {/* Danger Zone */}
-      <div className="bg-slate-800/30 rounded-xl p-5 border border-slate-700/30">
-        <h3 className="text-lg font-medium text-white mb-4">Опасная зона</h3>
-
-        <SidebarButton
-          onClick={onDelete}
-          icon={
-            isDeleting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Trash2 className="w-4 h-4" />
-            )
-          }
-          variant="danger"
-          disabled={isDeleting}
-        >
-          {isDeleting ? "Удаление..." : "Удалить запись"}
-        </SidebarButton>
-
-        <p className="text-xs text-slate-500 mt-2">
-          Это действие нельзя отменить. Будут удалены запись, транскрипт и все
-          связанные данные.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-interface InfoItemProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string | number;
-  truncate?: boolean;
-}
-
-function InfoItem({ icon, label, value, truncate }: InfoItemProps) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="text-slate-500 mt-0.5">{icon}</span>
-      <div className="flex-1 min-w-0">
-        <dt className="text-xs text-slate-500">{label}</dt>
-        <dd
-          className={cn("text-sm text-slate-300 mt-0.5", truncate && "truncate")}
-          title={truncate ? String(value) : undefined}
-        >
-          {value}
-        </dd>
-      </div>
     </div>
   );
 }

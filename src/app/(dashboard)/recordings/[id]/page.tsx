@@ -453,9 +453,7 @@ export default function RecordingDetailPage({
               artifacts={recording.artifacts ?? []}
               onDownloadAudio={handleDownloadAudio}
               onDownloadDocx={handleDownloadDocx}
-              onDelete={handleDelete}
               onAIAnalysis={handleAIAnalysis}
-              isDeleting={isDeleting}
               isAnalyzing={isAnalyzing}
               isExportingDocx={isExportingDocx}
             />
