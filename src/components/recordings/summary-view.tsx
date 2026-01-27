@@ -11,6 +11,8 @@ import {
   X,
   Download,
   Loader2,
+  Save,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Artifact } from "@/types/database";
@@ -18,6 +20,7 @@ import type { Artifact } from "@/types/database";
 interface SummaryViewProps {
   artifacts: Artifact[];
   recordingId?: string;
+  onUpdate?: () => void;
 }
 
 // Types for parsed artifact content
@@ -41,10 +44,12 @@ interface ParsedSummary {
   topics?: string[];
 }
 
-export function SummaryView({ artifacts, recordingId }: SummaryViewProps) {
+export function SummaryView({ artifacts, recordingId, onUpdate }: SummaryViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Find the summary artifact
   const summaryArtifact = artifacts.find((a) => a.type === "summary");
@@ -147,11 +152,40 @@ export function SummaryView({ artifacts, recordingId }: SummaryViewProps) {
   const handleStartEdit = () => {
     setEditedContent(generateEditText());
     setIsEditing(true);
+    setSaveSuccess(false);
   };
 
   const handleCancelEdit = () => {
     setEditedContent("");
     setIsEditing(false);
+    setSaveSuccess(false);
+  };
+
+  const handleSave = async () => {
+    if (!recordingId || !editedContent.trim()) return;
+
+    setIsSaving(true);
+    setSaveSuccess(false);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/artifacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "summary", content: editedContent }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save");
+      }
+
+      setSaveSuccess(true);
+      setIsEditing(false);
+      onUpdate?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось сохранить");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleExportDocx = async (useEdited: boolean = false) => {
@@ -229,16 +263,28 @@ export function SummaryView({ artifacts, recordingId }: SummaryViewProps) {
         />
         <div className="flex items-center gap-2">
           <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            Сохранить
+          </button>
+          <button
             onClick={() => handleExportDocx(true)}
             disabled={isExporting}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Download className="w-4 h-4" />
             )}
-            Экспортировать отредактированный
+            Экспорт DOCX
           </button>
           <button
             onClick={handleCancelEdit}

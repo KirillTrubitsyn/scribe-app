@@ -237,9 +237,46 @@ export default function RecordingDetailPage({
   };
 
   const handleSpeakerUpdate = async (speakerId: string, name: string) => {
-    // TODO: Implement speaker name update via API
-    console.log("Update speaker:", speakerId, name);
+    if (!recordingId) return;
+
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/speakers/${speakerId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update speaker");
+      }
+
+      // Refresh recording data to update speaker names everywhere
+      await refreshRecording();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось обновить имя спикера");
+      throw err; // Re-throw to let the SpeakerCard handle UI state
+    }
   };
+
+  const refreshRecording = useCallback(async () => {
+    if (!recordingId) return;
+
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecording({
+          ...data,
+          transcripts: data.transcripts || [],
+          artifacts: data.artifacts || [],
+          speakers: data.speakers || [],
+        });
+      }
+    } catch {
+      // Ignore refresh errors
+    }
+  }, [recordingId]);
 
   // Chat handlers
   const handleChatChange = useCallback((chatId: string) => {
@@ -368,6 +405,7 @@ export default function RecordingDetailPage({
                     currentTime={currentTime}
                     onSegmentClick={handleSegmentClick}
                     recordingId={recording.id}
+                    onUpdate={refreshRecording}
                   />
                 )}
 
@@ -375,6 +413,7 @@ export default function RecordingDetailPage({
                   <SummaryView
                     artifacts={recording.artifacts ?? []}
                     recordingId={recording.id}
+                    onUpdate={refreshRecording}
                   />
                 )}
 
@@ -383,6 +422,7 @@ export default function RecordingDetailPage({
                     recordingId={recording.id}
                     artifacts={recording.artifacts ?? []}
                     hasTranscript={!!transcript}
+                    onUpdate={refreshRecording}
                   />
                 )}
 

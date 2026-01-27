@@ -10,6 +10,7 @@ import {
   Check,
   Download,
   Loader2,
+  Save,
 } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import type { Transcript, TranscriptSegment, Speaker } from "@/types/database";
@@ -34,6 +35,7 @@ interface TranscriptViewProps {
   currentTime?: number;
   onSegmentClick?: (startTime: number) => void;
   recordingId?: string;
+  onUpdate?: () => void;
 }
 
 export function TranscriptView({
@@ -42,6 +44,7 @@ export function TranscriptView({
   currentTime = 0,
   onSegmentClick,
   recordingId,
+  onUpdate,
 }: TranscriptViewProps) {
   // Create speaker name map
   const speakerMap = useMemo(() => {
@@ -79,6 +82,7 @@ export function TranscriptView({
   const [viewMode, setViewMode] = useState<ViewMode>("segments");
   const [editedText, setEditedText] = useState("");
   const [isExporting, setIsExporting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Generate full text for editing
   const fullTextForEdit = useMemo(() => {
@@ -97,6 +101,31 @@ export function TranscriptView({
   const handleCancelEdit = () => {
     setEditedText("");
     setViewMode("segments");
+  };
+
+  const handleSave = async () => {
+    if (!recordingId || !editedText.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}/transcript`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editedText }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save");
+      }
+
+      setViewMode("segments");
+      onUpdate?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Не удалось сохранить");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleExportDocx = async (useEdited: boolean = false) => {
@@ -237,16 +266,28 @@ export function TranscriptView({
           />
           <div className="flex items-center gap-2">
             <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              Сохранить
+            </button>
+            <button
               onClick={() => handleExportDocx(true)}
               disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
             >
               {isExporting ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              Экспортировать отредактированный
+              Экспорт DOCX
             </button>
             <button
               onClick={handleCancelEdit}
