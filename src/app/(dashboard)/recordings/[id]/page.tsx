@@ -396,8 +396,8 @@ export default function RecordingDetailPage({
             </div>
 
             {/* Tab Content */}
-            <div className="flex-1 min-h-0">
-              <ErrorBoundary>
+            <div className="flex-1 min-h-0 flex flex-col">
+              <ErrorBoundary className="flex-1 min-h-0 flex flex-col">
                 {activeTab === "transcript" && (
                   <TranscriptView
                     transcript={transcript}
@@ -449,7 +449,7 @@ export default function RecordingDetailPage({
           </div>
 
           {/* Right column - Sidebar */}
-          <aside className="lg:w-80 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-6">
+          <aside className="lg:w-60 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-4">
             <DetailSidebar
               recording={recording}
               transcript={transcript}
