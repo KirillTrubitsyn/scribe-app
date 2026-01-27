@@ -24,3 +24,32 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Audio transcription spinner animations */
+@keyframes equalizer {
+  0%, 100% {
+    height: 20%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+@keyframes particle {
+  0%, 100% {
+    transform: translate(-50%, -50%) rotate(0deg) translateX(40px) scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: translate(-50%, -50%) rotate(180deg) translateX(40px) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-equalizer {
+  animation: equalizer 1s ease-in-out infinite;
+}
+
+.animate-particle {
+  animation: particle 2s ease-in-out infinite;
+}
