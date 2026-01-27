@@ -309,22 +309,22 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
       <table className="w-full">
         <thead className="overflow-hidden rounded-t-xl">
           <tr className="bg-slate-800/50 border-b border-slate-700/50">
-            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-slate-400">
               Название
             </th>
-            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+            <th className="hidden md:table-cell text-left px-6 py-4 text-sm font-medium text-slate-400">
               Дата
             </th>
-            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+            <th className="hidden lg:table-cell text-left px-6 py-4 text-sm font-medium text-slate-400">
               Длительность
             </th>
-            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+            <th className="hidden lg:table-cell text-left px-6 py-4 text-sm font-medium text-slate-400">
               Спикеры
             </th>
-            <th className="text-left px-6 py-4 text-sm font-medium text-slate-400">
+            <th className="text-left px-4 sm:px-6 py-4 text-sm font-medium text-slate-400">
               Статус
             </th>
-            <th className="w-12 px-6 py-4"></th>
+            <th className="w-12 px-2 sm:px-6 py-4"></th>
           </tr>
         </thead>
         <tbody>
@@ -338,31 +338,31 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
                 "group"
               )}
             >
-              <td className="px-6 py-4">
+              <td className="px-4 sm:px-6 py-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                  <div className="hidden sm:flex flex-shrink-0 w-10 h-10 rounded-lg bg-slate-700/50 items-center justify-center">
                     <FileAudio className="w-5 h-5 text-orange-400" />
                   </div>
-                  <span className="font-medium text-white group-hover:text-orange-400 transition-colors truncate max-w-[300px]">
+                  <span className="font-medium text-white group-hover:text-orange-400 transition-colors truncate max-w-[150px] sm:max-w-[300px]">
                     {recording.title}
                   </span>
                 </div>
               </td>
-              <td className="px-6 py-4 text-slate-400 text-sm">
+              <td className="hidden md:table-cell px-6 py-4 text-slate-400 text-sm">
                 {formatDate(recording.created_at)}
               </td>
-              <td className="px-6 py-4 text-slate-400 text-sm">
+              <td className="hidden lg:table-cell px-6 py-4 text-slate-400 text-sm">
                 {recording.duration_seconds
                   ? formatDuration(recording.duration_seconds)
                   : "—"}
               </td>
-              <td className="px-6 py-4 text-slate-400 text-sm">
+              <td className="hidden lg:table-cell px-6 py-4 text-slate-400 text-sm">
                 {getSpeakersCount(recording.speakers) || "—"}
               </td>
-              <td className="px-6 py-4">
+              <td className="px-4 sm:px-6 py-4">
                 <StatusBadge status={recording.status} />
               </td>
-              <td className="px-6 py-4">
+              <td className="px-2 sm:px-6 py-4">
                 <ActionMenu
                   recordingId={recording.id}
                   onDeleted={handleRecordingDeleted}
