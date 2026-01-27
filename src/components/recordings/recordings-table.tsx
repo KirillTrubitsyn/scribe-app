@@ -2,10 +2,108 @@
 
 import { useRouter } from "next/navigation";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
-import { FileAudio, MoreHorizontal, Trash2, Download, Edit, Loader2 } from "lucide-react";
+import { FileAudio, MoreHorizontal, Trash2, Download, Edit, Loader2, X } from "lucide-react";
 import { StatusBadge } from "./status-badge";
 import type { Recording, RecordingStatus } from "@/types/database";
 import { useState, useRef, useEffect } from "react";
+
+interface RenameDialogProps {
+  isOpen: boolean;
+  currentTitle: string;
+  onClose: () => void;
+  onRename: (newTitle: string) => Promise<void>;
+}
+
+function RenameDialog({ isOpen, currentTitle, onClose, onRename }: RenameDialogProps) {
+  const [title, setTitle] = useState(currentTitle);
+  const [isRenaming, setIsRenaming] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(currentTitle);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  }, [isOpen, currentTitle]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || title.trim() === currentTitle) {
+      onClose();
+      return;
+    }
+    setIsRenaming(true);
+    try {
+      await onRename(title.trim());
+      onClose();
+    } catch (error) {
+      console.error("Rename failed:", error);
+    } finally {
+      setIsRenaming(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-md rounded-xl bg-slate-800 border border-slate-700 shadow-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-white">Переименовать запись</h2>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            ref={inputRef}
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Введите новое название"
+            className="w-full px-4 py-3 rounded-lg bg-slate-900/50 border border-slate-600 text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+          />
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-700/50 transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              disabled={isRenaming || !title.trim()}
+              className="px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isRenaming && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isRenaming ? "Сохранение..." : "Сохранить"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export type RecordingWithRelations = Recording & {
   transcripts?: { word_count: number }[] | null;
@@ -17,7 +115,15 @@ interface RecordingsTableProps {
   className?: string;
 }
 
-function ActionMenu({ recordingId, onDeleted }: { recordingId: string; onDeleted: () => void }) {
+function ActionMenu({
+  recordingId,
+  onDeleted,
+  onRename
+}: {
+  recordingId: string;
+  onDeleted: () => void;
+  onRename: () => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -111,7 +217,7 @@ function ActionMenu({ recordingId, onDeleted }: { recordingId: string; onDeleted
             onClick={(e) => {
               e.stopPropagation();
               setIsOpen(false);
-              // TODO: Implement rename
+              onRename();
             }}
             className="w-full flex items-center gap-3 px-4 py-2 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white"
           >
@@ -156,12 +262,31 @@ function getSpeakersCount(speakers: { count: number }[] | null | undefined): num
 
 export function RecordingsTable({ recordings, className }: RecordingsTableProps) {
   const router = useRouter();
+  const [renameRecording, setRenameRecording] = useState<{ id: string; title: string } | null>(null);
 
   const handleRowClick = (recordingId: string) => {
     router.push(`/recordings/${recordingId}`);
   };
 
   const handleRecordingDeleted = () => {
+    router.refresh();
+  };
+
+  const handleRename = async (newTitle: string) => {
+    if (!renameRecording) return;
+
+    const response = await fetch(`/api/recordings/${renameRecording.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: newTitle }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to rename recording");
+    }
+
     router.refresh();
   };
 
@@ -238,12 +363,23 @@ export function RecordingsTable({ recordings, className }: RecordingsTableProps)
                 <StatusBadge status={recording.status} />
               </td>
               <td className="px-6 py-4">
-                <ActionMenu recordingId={recording.id} onDeleted={handleRecordingDeleted} />
+                <ActionMenu
+                  recordingId={recording.id}
+                  onDeleted={handleRecordingDeleted}
+                  onRename={() => setRenameRecording({ id: recording.id, title: recording.title })}
+                />
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      <RenameDialog
+        isOpen={renameRecording !== null}
+        currentTitle={renameRecording?.title ?? ""}
+        onClose={() => setRenameRecording(null)}
+        onRename={handleRename}
+      />
     </div>
   );
 }
