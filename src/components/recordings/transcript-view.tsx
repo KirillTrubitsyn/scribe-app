@@ -192,9 +192,9 @@ export function TranscriptView({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 mb-4">
         {/* View mode toggle */}
         <div className="flex items-center gap-1 p-1 bg-slate-800/50 rounded-lg">
           <button
@@ -256,68 +256,70 @@ export function TranscriptView({
       </div>
 
       {/* Content based on view mode */}
-      {viewMode === "edit" ? (
-        <div className="space-y-4">
-          <textarea
-            value={editedText}
-            onChange={(e) => setEditedText(e.target.value)}
-            className="w-full h-[500px] p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-            placeholder="Редактируйте транскрипт..."
-          />
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSave}
-              disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {isSaving ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
-              )}
-              Сохранить
-            </button>
-            <button
-              onClick={() => handleExportDocx(true)}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              Экспорт DOCX
-            </button>
-            <button
-              onClick={handleCancelEdit}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
-            >
-              <X className="w-4 h-4" />
-              Отмена
-            </button>
-          </div>
-        </div>
-      ) : viewMode === "segments" ? (
-        <div className="space-y-3">
-          {transcript.segments.map((segment, index) => (
-            <TranscriptSegmentItem
-              key={index}
-              segment={segment}
-              speakerName={getSpeakerName(segment.speaker)}
-              color={SPEAKER_COLORS[getColorIndex(segment.speaker)]}
-              isActive={currentTime >= segment.start && currentTime < segment.end}
-              onClick={() => onSegmentClick?.(segment.start)}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {viewMode === "edit" ? (
+          <div className="space-y-4 h-full flex flex-col">
+            <textarea
+              value={editedText}
+              onChange={(e) => setEditedText(e.target.value)}
+              className="w-full flex-1 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-200 text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              placeholder="Редактируйте транскрипт..."
             />
-          ))}
-        </div>
-      ) : (
-        <FullTextView
-          transcript={transcript}
-          currentTime={currentTime}
-          onSegmentClick={onSegmentClick}
-        />
-      )}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Сохранить
+              </button>
+              <button
+                onClick={() => handleExportDocx(true)}
+                disabled={isExporting}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                Экспорт DOCX
+              </button>
+              <button
+                onClick={handleCancelEdit}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Отмена
+              </button>
+            </div>
+          </div>
+        ) : viewMode === "segments" ? (
+          <div className="space-y-3">
+            {transcript.segments.map((segment, index) => (
+              <TranscriptSegmentItem
+                key={index}
+                segment={segment}
+                speakerName={getSpeakerName(segment.speaker)}
+                color={SPEAKER_COLORS[getColorIndex(segment.speaker)]}
+                isActive={currentTime >= segment.start && currentTime < segment.end}
+                onClick={() => onSegmentClick?.(segment.start)}
+              />
+            ))}
+          </div>
+        ) : (
+          <FullTextView
+            transcript={transcript}
+            currentTime={currentTime}
+            onSegmentClick={onSegmentClick}
+          />
+        )}
+      </div>
     </div>
   );
 }

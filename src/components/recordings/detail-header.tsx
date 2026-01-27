@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { ChevronRight, Calendar, Clock, Users, FileAudio } from "lucide-react";
-import { StatusBadge } from "./status-badge";
 import { formatDate, formatDuration } from "@/lib/utils";
 import type { Recording, Speaker } from "@/types/database";
 
@@ -28,14 +27,13 @@ export function DetailHeader({ recording, speakers }: DetailHeaderProps) {
         </span>
       </nav>
 
-      {/* Title and Status */}
+      {/* Title */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl md:text-3xl font-bold text-white truncate">
             {recording.title}
           </h1>
         </div>
-        <StatusBadge status={recording.status} />
       </div>
 
       {/* Metadata */}
