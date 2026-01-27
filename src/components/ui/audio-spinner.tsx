@@ -43,93 +43,14 @@ export function AudioSpinner({
         <div
           key={i}
           className={cn(
-            "rounded-full bg-gradient-to-t from-orange-500 to-amber-400",
+            "rounded-full bg-gradient-to-t from-orange-500 to-amber-400 animate-equalizer",
             barWidths[size]
           )}
           style={{
-            animation: `equalizer 1s ease-in-out infinite`,
             animationDelay: `${delays[i % delays.length]}s`,
-            height: "40%",
           }}
         />
       ))}
-      <style jsx>{`
-        @keyframes equalizer {
-          0%,
-          100% {
-            height: 20%;
-          }
-          50% {
-            height: 100%;
-          }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-interface WaveformSpinnerProps {
-  className?: string;
-}
-
-/**
- * Animated waveform spinner - sound wave being processed
- */
-export function WaveformSpinner({ className }: WaveformSpinnerProps) {
-  return (
-    <div className={cn("relative w-24 h-24", className)}>
-      {/* Background glow */}
-      <div className="absolute inset-0 rounded-full bg-orange-500/10" />
-
-      {/* Pulsing border */}
-      <div className="absolute inset-0 rounded-full border-2 border-orange-500/20 animate-pulse" />
-
-      {/* Waveform container */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <svg
-          viewBox="0 0 100 50"
-          className="w-16 h-8"
-          preserveAspectRatio="none"
-        >
-          <path
-            d="M0,25 Q10,10 20,25 T40,25 T60,25 T80,25 T100,25"
-            fill="none"
-            stroke="url(#waveGradient)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            className="animate-wave"
-          />
-          <defs>
-            <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#f97316" />
-              <stop offset="100%" stopColor="#fbbf24" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
-
-      <style jsx>{`
-        @keyframes wave {
-          0% {
-            d: path("M0,25 Q10,10 20,25 T40,25 T60,25 T80,25 T100,25");
-          }
-          25% {
-            d: path("M0,25 Q10,35 20,25 T40,25 T60,25 T80,25 T100,25");
-          }
-          50% {
-            d: path("M0,25 Q10,25 20,15 T40,35 T60,15 T80,35 T100,25");
-          }
-          75% {
-            d: path("M0,25 Q10,15 20,30 T40,20 T60,30 T80,20 T100,25");
-          }
-          100% {
-            d: path("M0,25 Q10,10 20,25 T40,25 T60,25 T80,25 T100,25");
-          }
-        }
-        .animate-wave {
-          animation: wave 2s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   );
 }
@@ -160,29 +81,16 @@ export function TranscriptionSpinner({ className }: TranscriptionSpinnerProps) {
         {[...Array(3)].map((_, i) => (
           <div
             key={i}
-            className="absolute w-1.5 h-1.5 rounded-full bg-orange-400"
+            className="absolute w-1.5 h-1.5 rounded-full bg-orange-400 animate-particle"
             style={{
               top: "50%",
               left: "50%",
-              animation: `particle ${2 + i * 0.5}s ease-in-out infinite`,
+              animationDuration: `${2 + i * 0.5}s`,
               animationDelay: `${i * 0.3}s`,
             }}
           />
         ))}
       </div>
-
-      <style jsx>{`
-        @keyframes particle {
-          0%, 100% {
-            transform: translate(-50%, -50%) rotate(0deg) translateX(40px) scale(0);
-            opacity: 0;
-          }
-          50% {
-            transform: translate(-50%, -50%) rotate(180deg) translateX(40px) scale(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
     </div>
   );
 }
