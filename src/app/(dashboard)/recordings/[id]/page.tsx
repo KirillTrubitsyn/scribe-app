@@ -362,7 +362,7 @@ export default function RecordingDetailPage({
         {/* Main content with sidebar */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
           {/* Left column - Player, Tabs, Content */}
-          <div className="flex flex-col gap-6 min-w-0 h-[calc(100vh-120px)]">
+          <div className="flex flex-col gap-6 min-w-0 h-[calc(100vh-80px)]">
             {/* Audio Player */}
             {recording.audioUrl ? (
               <AudioPlayer
