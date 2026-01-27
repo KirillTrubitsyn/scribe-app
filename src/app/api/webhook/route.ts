@@ -83,7 +83,7 @@ function isValidWebhookPayload(body: unknown): body is WebhookPayload {
 
 const eventToStatus: Record<WebhookEvent, RecordingStatus> = {
   processing_started: "processing",
-  transcription_completed: "analyzing",
+  transcription_completed: "ready", // Transcription is final step, user triggers analysis manually
   analysis_completed: "ready",
   processing_failed: "error",
 };
@@ -369,26 +369,11 @@ async function handleTranscriptionCompleted(
     );
   }
 
-  // Create analysis job
-  // Note: Only include required fields - nullable columns will default to NULL
-  const { error: analysisJobError } = await supabase
-    .from("processing_jobs")
-    .insert({
-      recording_id: recordingId,
-      job_type: "analysis",
-      status: "running",
-      started_at: new Date().toISOString(),
-    });
-
-  if (analysisJobError) {
-    console.error(
-      `[Webhook] Failed to create analysis job for ${recordingId}:`,
-      JSON.stringify(analysisJobError)
-    );
-    // Don't throw - transcription completed successfully, analysis job creation is secondary
-  } else {
-    console.log(`[Webhook] Created analysis job for recording ${recordingId}`);
-  }
+  // Note: Analysis job is NOT created automatically
+  // User will trigger AI analysis manually from the UI
+  console.log(
+    `[Webhook] Transcription completed for ${recordingId}. User can trigger AI analysis manually.`
+  );
 }
 
 async function handleAnalysisCompleted(

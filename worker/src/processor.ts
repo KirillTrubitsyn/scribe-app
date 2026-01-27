@@ -1,10 +1,8 @@
 import { v4 as uuidv4 } from 'uuid'
 import { transcribeAudio } from './transcription.js'
-import { analyzeTranscript } from './analysis.js'
 import {
   sendProcessingStarted,
   sendTranscriptionCompleted,
-  sendAnalysisCompleted,
   sendProcessingFailed,
 } from './webhook.js'
 
@@ -84,7 +82,7 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       throw new Error('Транскрипция не дала результатов. Аудио может быть пустым, слишком коротким или не содержать распознаваемой речи.')
     }
 
-    // 3. Send webhook: transcription_completed
+    // 3. Send webhook: transcription_completed (this is the final step)
     console.log('[Processor] Step 3: Sending transcription_completed webhook')
     await sendTranscriptionCompleted(
       recording_id,
@@ -94,30 +92,14 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       transcriptionResult.durationSeconds
     )
 
-    // Update status
-    activeJobs.set(recording_id, {
-      ...activeJobs.get(recording_id)!,
-      status: 'analyzing',
-    })
-
-    // 4. Run AI analysis (Gemini)
-    console.log('[Processor] Step 4: Starting AI analysis')
-    const analysisResult = await analyzeTranscript(transcriptionResult.transcript)
-
-    console.log(`[Processor] Analysis completed: ${analysisResult.artifacts.length} artifacts generated`)
-
-    // 5. Send webhook: analysis_completed
-    console.log('[Processor] Step 5: Sending analysis_completed webhook')
-    await sendAnalysisCompleted(recording_id, jobId, analysisResult.artifacts)
-
-    // Mark as completed
+    // Mark as completed (transcription done, user can now manually trigger analysis)
     activeJobs.set(recording_id, {
       ...activeJobs.get(recording_id)!,
       status: 'completed',
       completed_at: new Date().toISOString(),
     })
 
-    console.log(`[Processor] Successfully completed processing for recording ${recording_id}`)
+    console.log(`[Processor] Transcription completed for recording ${recording_id}. User can now manually trigger AI analysis.`)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
 
