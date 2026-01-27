@@ -945,7 +945,7 @@ export async function generateRecordingDocx(
 /**
  * Generate filename for the document
  */
-export function generateDocxFilename(recording: Recording): string {
+export function generateDocxFilename(recording: Recording, docType?: string): string {
   const date = new Date().toISOString().split("T")[0];
   const safeName = recording.title
     .replace(/[^a-zA-Zа-яА-ЯёЁ0-9\s-]/g, "")
@@ -953,5 +953,872 @@ export function generateDocxFilename(recording: Recording): string {
     .replace(/\s+/g, "-")
     .slice(0, 50) || "recording";
 
-  return `${safeName}-${date}.docx`;
+  const suffix = docType ? `-${docType}` : "";
+  return `${safeName}${suffix}-${date}.docx`;
+}
+
+/**
+ * Generate DOCX with only transcript
+ */
+export async function generateTranscriptDocx(
+  recording: Recording,
+  transcript: Transcript,
+  speakers: Speaker[],
+  editedText?: string
+): Promise<Buffer> {
+  const children: Paragraph[] = [];
+
+  // Title
+  const title = transcript?.full_text
+    ? generateTitle(transcript.full_text)
+    : "ТРАНСКРИПЦИЯ АУДИОЗАПИСИ";
+
+  children.push(...createHeader(title, recording));
+  children.push(...createMetadataSection(recording, transcript, speakers));
+
+  // If edited text provided, use it instead of segments
+  if (editedText) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ТРАНСКРИПТ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 300, after: 200 },
+      })
+    );
+
+    // Split by paragraphs
+    const paragraphs = editedText.split("\n\n").filter(p => p.trim());
+    paragraphs.forEach(para => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: para.trim(),
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 200 },
+        })
+      );
+    });
+  } else {
+    children.push(...createTranscriptSection(transcript, speakers));
+  }
+
+  // Footer
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "─".repeat(60),
+          size: 16,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400, after: 200 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Документ создан: ${formatDate(new Date().toISOString())}`,
+          size: 18,
+          font: "Times New Roman",
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.RIGHT,
+    })
+  );
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Times New Roman",
+            size: 22,
+          },
+        },
+      },
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(1),
+              right: convertInchesToTwip(0.75),
+              bottom: convertInchesToTwip(1),
+              left: convertInchesToTwip(1.25),
+            },
+          },
+        },
+        footers: {
+          default: createFooter(),
+        },
+        children,
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return Buffer.from(buffer);
+}
+
+/**
+ * Generate DOCX with only summary
+ */
+export async function generateSummaryDocx(
+  recording: Recording,
+  summaryContent: string
+): Promise<Buffer> {
+  const children: Paragraph[] = [];
+
+  // Header
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "РЕЗЮМЕ",
+          bold: true,
+          size: 28,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: recording.title,
+          bold: true,
+          size: 24,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    })
+  );
+
+  // Metadata
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Дата: ${formatDate(recording.created_at)}`,
+          size: 22,
+          font: "Times New Roman",
+        }),
+      ],
+      spacing: { after: 200 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "─".repeat(60),
+          size: 16,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 200, after: 300 },
+    })
+  );
+
+  // Try to parse as JSON, otherwise use as plain text
+  let summary: SummaryArtifact;
+  try {
+    summary = JSON.parse(summaryContent) as SummaryArtifact;
+  } catch {
+    // Plain text summary
+    const paragraphs = summaryContent.split("\n\n").filter(p => p.trim());
+    paragraphs.forEach(para => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: para.trim(),
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 200 },
+        })
+      );
+    });
+
+    // Footer
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "─".repeat(60),
+            size: 16,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Документ создан: ${formatDate(new Date().toISOString())}`,
+            size: 18,
+            font: "Times New Roman",
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.RIGHT,
+      })
+    );
+
+    const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: "Times New Roman",
+              size: 22,
+            },
+          },
+        },
+      },
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: convertInchesToTwip(1),
+                right: convertInchesToTwip(0.75),
+                bottom: convertInchesToTwip(1),
+                left: convertInchesToTwip(1.25),
+              },
+            },
+          },
+          footers: {
+            default: createFooter(),
+          },
+          children,
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    return Buffer.from(buffer);
+  }
+
+  // Summary text
+  if (summary.summary) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Краткое содержание",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: summary.summary,
+            size: 22,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { after: 300 },
+      })
+    );
+  }
+
+  // Key Points
+  if (summary.keyPoints && summary.keyPoints.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Ключевые моменты",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 200, after: 100 },
+      })
+    );
+
+    summary.keyPoints.forEach(point => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `• ${point}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 60 },
+        })
+      );
+    });
+  }
+
+  // Decisions
+  if (summary.decisions && summary.decisions.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Принятые решения",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    summary.decisions.forEach(decision => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `• ${decision}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 60 },
+        })
+      );
+    });
+  }
+
+  // Action Items
+  if (summary.actionItems && summary.actionItems.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "Задачи",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    summary.actionItems.forEach((item, index) => {
+      const parts = [`${index + 1}. ${item.task}`];
+      if (item.assignee) parts.push(`Ответственный: ${item.assignee}`);
+      if (item.deadline) parts.push(`Срок: ${item.deadline}`);
+
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: parts.join(" | "),
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 80 },
+        })
+      );
+    });
+  }
+
+  // Footer
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "─".repeat(60),
+          size: 16,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400, after: 200 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Документ создан: ${formatDate(new Date().toISOString())}`,
+          size: 18,
+          font: "Times New Roman",
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.RIGHT,
+    })
+  );
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Times New Roman",
+            size: 22,
+          },
+        },
+      },
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(1),
+              right: convertInchesToTwip(0.75),
+              bottom: convertInchesToTwip(1),
+              left: convertInchesToTwip(1.25),
+            },
+          },
+        },
+        footers: {
+          default: createFooter(),
+        },
+        children,
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return Buffer.from(buffer);
+}
+
+/**
+ * Generate DOCX with only protocol
+ */
+export async function generateProtocolDocx(
+  recording: Recording,
+  protocolContent: string
+): Promise<Buffer> {
+  const children: Paragraph[] = [];
+
+  let protocol: ProtocolArtifact;
+  try {
+    protocol = JSON.parse(protocolContent) as ProtocolArtifact;
+  } catch {
+    // Plain text protocol
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ПРОТОКОЛ",
+            bold: true,
+            size: 28,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: recording.title,
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 400 },
+      })
+    );
+
+    const paragraphs = protocolContent.split("\n\n").filter(p => p.trim());
+    paragraphs.forEach(para => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: para.trim(),
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 200 },
+        })
+      );
+    });
+
+    // Footer
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "─".repeat(60),
+            size: 16,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 400, after: 200 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Документ создан: ${formatDate(new Date().toISOString())}`,
+            size: 18,
+            font: "Times New Roman",
+            italics: true,
+          }),
+        ],
+        alignment: AlignmentType.RIGHT,
+      })
+    );
+
+    const doc = new Document({
+      styles: {
+        default: {
+          document: {
+            run: {
+              font: "Times New Roman",
+              size: 22,
+            },
+          },
+        },
+      },
+      sections: [
+        {
+          properties: {
+            page: {
+              margin: {
+                top: convertInchesToTwip(1),
+                right: convertInchesToTwip(0.75),
+                bottom: convertInchesToTwip(1),
+                left: convertInchesToTwip(1.25),
+              },
+            },
+          },
+          footers: {
+            default: createFooter(),
+          },
+          children,
+        },
+      ],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    return Buffer.from(buffer);
+  }
+
+  // Header
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: protocol.title || "ПРОТОКОЛ ВСТРЕЧИ",
+          bold: true,
+          size: 28,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    })
+  );
+
+  // Date
+  if (protocol.date) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: `Дата: ${protocol.date}`,
+            size: 22,
+            font: "Times New Roman",
+          }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 300 },
+      })
+    );
+  }
+
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "─".repeat(60),
+          size: 16,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 300 },
+    })
+  );
+
+  // Participants
+  if (protocol.participants && protocol.participants.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "УЧАСТНИКИ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { after: 100 },
+      })
+    );
+
+    protocol.participants.forEach(participant => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `• ${participant}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 40 },
+        })
+      );
+    });
+  }
+
+  // Agenda
+  if (protocol.agenda && protocol.agenda.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ПОВЕСТКА ДНЯ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    protocol.agenda.forEach((item, index) => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${index + 1}. ${item}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 60 },
+        })
+      );
+    });
+  }
+
+  // Discussion
+  if (protocol.discussion && protocol.discussion.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ХОД ОБСУЖДЕНИЯ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    protocol.discussion.forEach(item => {
+      if (item.topic) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: item.topic,
+                bold: true,
+                size: 22,
+                font: "Times New Roman",
+              }),
+            ],
+            spacing: { before: 150, after: 60 },
+          })
+        );
+      }
+      if (item.content) {
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: item.content,
+                size: 22,
+                font: "Times New Roman",
+              }),
+            ],
+            alignment: AlignmentType.JUSTIFIED,
+            indent: { left: convertInchesToTwip(0.3) },
+            spacing: { after: 100 },
+          })
+        );
+      }
+    });
+  }
+
+  // Conclusions
+  if (protocol.conclusions && protocol.conclusions.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ИТОГИ И РЕШЕНИЯ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    protocol.conclusions.forEach((conclusion, index) => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${index + 1}. ${conclusion}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 60 },
+        })
+      );
+    });
+  }
+
+  // Next steps
+  if (protocol.next_steps && protocol.next_steps.length > 0) {
+    children.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: "ДАЛЬНЕЙШИЕ ШАГИ",
+            bold: true,
+            size: 24,
+            font: "Times New Roman",
+          }),
+        ],
+        spacing: { before: 300, after: 100 },
+      })
+    );
+
+    protocol.next_steps.forEach((step, index) => {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `${index + 1}. ${step}`,
+              size: 22,
+              font: "Times New Roman",
+            }),
+          ],
+          indent: { left: convertInchesToTwip(0.3) },
+          spacing: { after: 60 },
+        })
+      );
+    });
+  }
+
+  // Footer
+  children.push(
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: "─".repeat(60),
+          size: 16,
+          font: "Times New Roman",
+        }),
+      ],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400, after: 200 },
+    }),
+    new Paragraph({
+      children: [
+        new TextRun({
+          text: `Документ создан: ${formatDate(new Date().toISOString())}`,
+          size: 18,
+          font: "Times New Roman",
+          italics: true,
+        }),
+      ],
+      alignment: AlignmentType.RIGHT,
+    })
+  );
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Times New Roman",
+            size: 22,
+          },
+        },
+      },
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            margin: {
+              top: convertInchesToTwip(1),
+              right: convertInchesToTwip(0.75),
+              bottom: convertInchesToTwip(1),
+              left: convertInchesToTwip(1.25),
+            },
+          },
+        },
+        footers: {
+          default: createFooter(),
+        },
+        children,
+      },
+    ],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  return Buffer.from(buffer);
 }
