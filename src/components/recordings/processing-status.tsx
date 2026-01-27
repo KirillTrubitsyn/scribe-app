@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Upload,
   Wand2,
@@ -10,6 +11,7 @@ import {
   XCircle,
   RefreshCw,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TranscriptionSpinner } from "@/components/ui/audio-spinner";
