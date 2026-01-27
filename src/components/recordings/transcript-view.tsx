@@ -194,13 +194,13 @@ export function TranscriptView({
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2 flex-wrap shrink-0 mb-4">
+      <div className="flex items-center gap-2 shrink-0 mb-4">
         {/* View mode toggle */}
         <div className="flex items-center gap-1 p-1 bg-slate-800/50 rounded-lg">
           <button
             onClick={() => setViewMode("segments")}
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
               viewMode === "segments"
                 ? "bg-slate-700 text-white"
                 : "text-slate-400 hover:text-white"
@@ -208,12 +208,12 @@ export function TranscriptView({
             title="Показать сегменты по спикерам"
           >
             <List className="w-4 h-4" />
-            Сегменты
+            <span className="hidden sm:inline">Сегменты</span>
           </button>
           <button
             onClick={() => setViewMode("fulltext")}
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
               viewMode === "fulltext"
                 ? "bg-slate-700 text-white"
                 : "text-slate-400 hover:text-white"
@@ -221,12 +221,12 @@ export function TranscriptView({
             title="Показать сплошной текст"
           >
             <AlignJustify className="w-4 h-4" />
-            Текст
+            <span className="hidden sm:inline">Текст</span>
           </button>
           <button
             onClick={handleStartEdit}
             className={cn(
-              "flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+              "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
               viewMode === "edit"
                 ? "bg-slate-700 text-white"
                 : "text-slate-400 hover:text-white"
@@ -234,7 +234,7 @@ export function TranscriptView({
             title="Редактировать транскрипт"
           >
             <Pencil className="w-4 h-4" />
-            Редактировать
+            <span className="hidden sm:inline">Редактировать</span>
           </button>
         </div>
 
@@ -243,14 +243,14 @@ export function TranscriptView({
           <button
             onClick={() => handleExportDocx(false)}
             disabled={isExporting}
-            className="flex items-center gap-2 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ml-auto"
           >
             {isExporting ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Download className="w-4 h-4" />
             )}
-            Экспорт DOCX
+            <span className="hidden sm:inline">Экспорт DOCX</span>
           </button>
         )}
       </div>
