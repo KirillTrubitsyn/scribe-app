@@ -26,8 +26,8 @@ export default function DashboardPage() {
           <DashboardClient />
         </div>
 
-        {/* Feature Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Feature Cards - hidden on mobile for single-screen experience */}
+        <div className="hidden sm:grid sm:grid-cols-3 gap-4">
           <FeatureCard
             icon={<Users className="w-5 h-5" />}
             title="Спикеры"
