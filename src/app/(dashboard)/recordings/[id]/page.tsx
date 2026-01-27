@@ -415,9 +415,7 @@ export default function RecordingDetailPage({
               transcript={transcript}
               artifacts={recording.artifacts ?? []}
               onDownloadAudio={handleDownloadAudio}
-              onDelete={handleDelete}
               onAIAnalysis={handleAIAnalysis}
-              isDeleting={isDeleting}
               isAnalyzing={isAnalyzing}
             />
             {/* Chat History */}
