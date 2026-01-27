@@ -26,6 +26,7 @@ interface DetailSidebarProps {
   onAIAnalysis?: () => void;
   isDeleting?: boolean;
   isAnalyzing?: boolean;
+  isExportingDocx?: boolean;
 }
 
 export function DetailSidebar({
@@ -38,6 +39,7 @@ export function DetailSidebar({
   onAIAnalysis,
   isDeleting = false,
   isAnalyzing = false,
+  isExportingDocx = false,
 }: DetailSidebarProps) {
   const hasSummary = artifacts.some((a) => a.type === "summary");
   const hasTranscript = transcript && transcript.segments?.length > 0;
@@ -99,11 +101,17 @@ export function DetailSidebar({
 
           <SidebarButton
             onClick={onDownloadDocx}
-            icon={<FileText className="w-4 h-4" />}
-            disabled={!hasTranscript}
+            icon={
+              isExportingDocx ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileText className="w-4 h-4" />
+              )
+            }
+            disabled={!hasTranscript || isExportingDocx}
             title={!hasTranscript ? "Транскрипт еще не готов" : undefined}
           >
-            Скачать DOCX
+            {isExportingDocx ? "Экспорт..." : "Скачать DOCX"}
           </SidebarButton>
         </div>
       </div>
