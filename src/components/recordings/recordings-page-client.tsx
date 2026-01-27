@@ -1,11 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { Plus } from "lucide-react";
-import { RecordingsFilter, type FilterValue } from "./recordings-filter";
 import { RecordingsTable, type RecordingWithRelations } from "./recordings-table";
 import { UploadModal } from "./upload-modal";
-import { formatDuration } from "@/lib/utils";
 
 interface RecordingsPageClientProps {
   recordings: RecordingWithRelations[];
@@ -25,21 +23,7 @@ function formatTotalHours(seconds: number): string {
 }
 
 export function RecordingsPageClient({ recordings }: RecordingsPageClientProps) {
-  const [filter, setFilter] = useState<FilterValue>("all");
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-
-  const filteredRecordings = useMemo(() => {
-    if (filter === "all") return recordings;
-
-    if (filter === "ready") {
-      return recordings.filter((r) => r.status === "ready");
-    }
-
-    // processing filter - includes all non-ready, non-error statuses
-    return recordings.filter((r) =>
-      ["processing", "transcribing", "analyzing", "uploading", "uploaded"].includes(r.status)
-    );
-  }, [recordings, filter]);
 
   const totalCount = recordings.length;
   const totalDuration = calculateTotalDuration(recordings);
@@ -65,11 +49,8 @@ export function RecordingsPageClient({ recordings }: RecordingsPageClientProps) 
           </button>
         </div>
 
-        {/* Filters */}
-        <RecordingsFilter value={filter} onChange={setFilter} />
-
         {/* Table */}
-        <RecordingsTable recordings={filteredRecordings} />
+        <RecordingsTable recordings={recordings} />
       </div>
 
       <UploadModal
