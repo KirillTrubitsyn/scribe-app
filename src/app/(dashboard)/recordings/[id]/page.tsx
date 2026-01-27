@@ -12,7 +12,6 @@ import { SummaryView } from "@/components/recordings/summary-view";
 import { SpeakersView } from "@/components/recordings/speakers-view";
 import { AIChat } from "@/components/recordings/ai-chat";
 import { ProtocolView } from "@/components/recordings/protocol-view";
-import { DetailSidebar } from "@/components/recordings/detail-sidebar";
 import { ProcessingStatus } from "@/components/recordings/processing-status";
 import { ChatHistory } from "@/components/recordings/chat-history";
 import { ErrorBoundary } from "@/components/error-boundary";
@@ -452,16 +451,9 @@ export default function RecordingDetailPage({
             </div>
           </div>
 
-          {/* Right column - Sidebar */}
-          <aside className="lg:w-60 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-4">
-            <DetailSidebar
-              recording={recording}
-              artifacts={recording.artifacts ?? []}
-              onAIAnalysis={handleAIAnalysis}
-              isAnalyzing={isAnalyzing}
-            />
-            {/* Chat History - only visible in chat tab */}
-            {transcript && activeTab === "chat" && (
+          {/* Right column - Sidebar (Chat History only) */}
+          {transcript && activeTab === "chat" && (
+            <aside className="lg:w-60 lg:shrink-0 lg:sticky lg:top-8 lg:self-start space-y-4">
               <ChatHistory
                 recordingId={recording.id}
                 currentChatId={currentChatId}
@@ -469,8 +461,8 @@ export default function RecordingDetailPage({
                 onNewChat={handleNewChat}
                 refreshTrigger={chatHistoryRefresh}
               />
-            )}
-          </aside>
+            </aside>
+          )}
         </div>
       </div>
     </div>

@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
-  Loader2,
   Upload,
   Wand2,
   FileText,
   Sparkles,
   CheckCircle2,
   XCircle,
-  ArrowLeft,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TranscriptionSpinner } from "@/components/ui/audio-spinner";
 import type { RecordingStatus } from "@/types/database";
 
 interface ProcessingStatusProps {
@@ -131,12 +130,9 @@ export function ProcessingStatus({
 
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
-      {/* Main spinner */}
-      <div className="relative mb-8">
-        <div className="w-24 h-24 rounded-full bg-orange-500/10 flex items-center justify-center">
-          <Loader2 className="w-12 h-12 text-orange-500 animate-spin" />
-        </div>
-        <div className="absolute inset-0 rounded-full border-2 border-orange-500/20 animate-pulse" />
+      {/* Animated audio transcription spinner */}
+      <div className="mb-8">
+        <TranscriptionSpinner />
       </div>
 
       {/* Current status */}
@@ -208,14 +204,6 @@ export function ProcessingStatus({
         </div>
       </div>
 
-      {/* Back link */}
-      <Link
-        href="/recordings"
-        className="mt-8 flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Вернуться к списку записей
-      </Link>
     </div>
   );
 }
