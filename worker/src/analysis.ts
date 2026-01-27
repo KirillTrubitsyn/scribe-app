@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'
+import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import type { ArtifactData, TranscriptData, SpeakerData } from './webhook.js'
 
 // ============================================
@@ -70,27 +70,32 @@ interface AnalyticsOutput {
 // Configuration
 // ============================================
 
-function getGeminiClient(): GenerativeModel {
+function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY
 
   if (!apiKey) {
     throw new Error('Missing GEMINI_API_KEY environment variable')
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey)
+  return new GoogleGenAI({ apiKey })
+}
 
-  return genAI.getGenerativeModel({
+async function generateContent(genAI: GoogleGenAI, prompt: string): Promise<string> {
+  const response = await genAI.models.generateContent({
     model: 'gemini-3-flash-preview',
-    generationConfig: {
+    contents: prompt,
+    config: {
       temperature: 0.3,
       topP: 0.8,
       topK: 40,
       maxOutputTokens: 8192,
       thinkingConfig: {
-        thinkingBudget: 'high',
+        thinkingLevel: ThinkingLevel.HIGH,
       },
     },
   })
+
+  return response.text || ''
 }
 
 // ============================================
@@ -234,7 +239,7 @@ export async function analyzeTranscript(
 ): Promise<AnalysisResult> {
   console.log('[Analysis] Starting transcript analysis')
 
-  const model = getGeminiClient()
+  const genAI = getGeminiClient()
   const fullText = prepareTranscriptForAnalysis(transcript, speakers)
 
   if (!fullText || fullText.length < 50) {
@@ -257,10 +262,10 @@ export async function analyzeTranscript(
   // Run all analyses in parallel for speed
   console.log('[Analysis] Running all analyses in parallel...')
   const [summary, protocol, actionItems, analytics] = await Promise.all([
-    generateSummary(model, fullText),
-    generateProtocol(model, fullText),
-    generateActionItems(model, fullText),
-    generateAnalytics(model, fullText),
+    generateSummary(genAI, fullText),
+    generateProtocol(genAI, fullText),
+    generateActionItems(genAI, fullText),
+    generateAnalytics(genAI, fullText),
   ])
 
   const artifacts: ArtifactData[] = []
@@ -354,14 +359,13 @@ function formatTimestamp(seconds: number): string {
 // ============================================
 
 async function generateSummary(
-  model: GenerativeModel,
+  genAI: GoogleGenAI,
   transcript: string
 ): Promise<SummaryOutput | null> {
   try {
     console.log('[Analysis] Generating summary...')
 
-    const result = await model.generateContent(SUMMARY_PROMPT + transcript)
-    const response = result.response.text()
+    const response = await generateContent(genAI, SUMMARY_PROMPT + transcript)
 
     return parseJsonResponse<SummaryOutput>(response)
   } catch (error) {
@@ -371,14 +375,13 @@ async function generateSummary(
 }
 
 async function generateProtocol(
-  model: GenerativeModel,
+  genAI: GoogleGenAI,
   transcript: string
 ): Promise<ProtocolOutput | null> {
   try {
     console.log('[Analysis] Generating protocol...')
 
-    const result = await model.generateContent(PROTOCOL_PROMPT + transcript)
-    const response = result.response.text()
+    const response = await generateContent(genAI, PROTOCOL_PROMPT + transcript)
 
     return parseJsonResponse<ProtocolOutput>(response)
   } catch (error) {
@@ -388,14 +391,13 @@ async function generateProtocol(
 }
 
 async function generateActionItems(
-  model: GenerativeModel,
+  genAI: GoogleGenAI,
   transcript: string
 ): Promise<ActionItemsOutput | null> {
   try {
     console.log('[Analysis] Generating action items...')
 
-    const result = await model.generateContent(ACTION_ITEMS_PROMPT + transcript)
-    const response = result.response.text()
+    const response = await generateContent(genAI, ACTION_ITEMS_PROMPT + transcript)
 
     return parseJsonResponse<ActionItemsOutput>(response)
   } catch (error) {
@@ -405,14 +407,13 @@ async function generateActionItems(
 }
 
 async function generateAnalytics(
-  model: GenerativeModel,
+  genAI: GoogleGenAI,
   transcript: string
 ): Promise<AnalyticsOutput | null> {
   try {
     console.log('[Analysis] Generating analytics...')
 
-    const result = await model.generateContent(ANALYTICS_PROMPT + transcript)
-    const response = result.response.text()
+    const response = await generateContent(genAI, ANALYTICS_PROMPT + transcript)
 
     return parseJsonResponse<AnalyticsOutput>(response)
   } catch (error) {
