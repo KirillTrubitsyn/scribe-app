@@ -177,12 +177,19 @@ export async function transcribeAudio(
   gcsUri: string,
   model: TranscriptionModel = 'gemini'
 ): Promise<TranscriptionResult> {
-  console.log(`[Transcription] Starting ${model} transcription for ${gcsUri}`)
+  console.log(`[Transcription] ========================================`)
+  console.log(`[Transcription] transcribeAudio called with model param: "${model}"`)
+  console.log(`[Transcription] GCS URI: ${gcsUri}`)
+  console.log(`[Transcription] Model routing decision: model === 'chirp' ? ${model === 'chirp'}`)
 
   if (model === 'chirp') {
+    console.log(`[Transcription] >>> ROUTING TO CHIRP 3 <<<`)
+    console.log(`[Transcription] ========================================`)
     return transcribeWithChirp(gcsUri)
   }
 
+  console.log(`[Transcription] >>> ROUTING TO GEMINI 3 FLASH <<<`)
+  console.log(`[Transcription] ========================================`)
   return transcribeWithGemini(gcsUri)
 }
 
@@ -191,7 +198,8 @@ export async function transcribeAudio(
 // ============================================
 
 async function transcribeWithGemini(gcsUri: string): Promise<TranscriptionResult> {
-  console.log(`[Transcription] Using Gemini 3 Flash`)
+  console.log(`[Transcription] *** GEMINI 3 FLASH TRANSCRIPTION STARTED ***`)
+  console.log(`[Transcription] Calling Google Gemini API (model: gemini-3-flash-preview)`)
 
   try {
     // 1. Download audio from GCS
@@ -303,7 +311,8 @@ async function transcribeWithGemini(gcsUri: string): Promise<TranscriptionResult
 // ============================================
 
 async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult> {
-  console.log(`[Transcription] Using Chirp 3 Dynamic Batch`)
+  console.log(`[Transcription] *** CHIRP 3 BATCH TRANSCRIPTION STARTED ***`)
+  console.log(`[Transcription] Calling Google Speech-to-Text V2 API (model: chirp_3)`)
 
   try {
     const client = getSpeechClient()
