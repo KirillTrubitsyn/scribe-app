@@ -22,7 +22,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [showTitleInput, setShowTitleInput] = useState(false);
-  const [model, setModel] = useState<TranscriptionModel>("gemini");
+  const [model, setModel] = useState<TranscriptionModel | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -53,7 +53,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
       resetUpload();
       setTitle("");
       setShowTitleInput(false);
-      setModel("gemini");
+      setModel(null);
       setIsSubmitting(false);
     }
   }, [isOpen, resetRecording, resetUpload]);
@@ -79,7 +79,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   }, [uploadState, onClose]);
 
   const handleUpload = async () => {
-    if (!audioBlob || isSubmitting) return;
+    if (!audioBlob || !model || isSubmitting) return;
 
     setIsSubmitting(true);
 
@@ -219,7 +219,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
               {/* Model Switcher */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Модель транскрипции
+                  Модель транскрипции <span className="text-orange-400">*</span>
                 </label>
                 <div className="flex gap-2">
                   <button
@@ -263,8 +263,13 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                 </button>
                 <button
                   onClick={handleUpload}
-                  disabled={isSubmitting}
-                  className="flex-1 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSubmitting || !model}
+                  className={cn(
+                    "flex-1 py-3 rounded-xl font-medium transition-all disabled:cursor-not-allowed",
+                    model
+                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 disabled:opacity-50"
+                      : "bg-slate-800 text-slate-500"
+                  )}
                 >
                   {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>

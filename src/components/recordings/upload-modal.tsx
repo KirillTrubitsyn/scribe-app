@@ -16,7 +16,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("");
-  const [model, setModel] = useState<TranscriptionModel>("gemini");
+  const [model, setModel] = useState<TranscriptionModel | null>(null);
   const { state, progress, error, recordingId, upload, reset } = useUpload();
 
   // Reset state when modal opens/closes
@@ -24,7 +24,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
     if (!isOpen) {
       setFile(null);
       setTitle("");
-      setModel("gemini");
+      setModel(null);
       reset();
     }
   }, [isOpen, reset]);
@@ -44,7 +44,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
   }, [state, onClose]);
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file || !model) return;
 
     const result = await upload(file, title || file.name.replace(/\.[^/.]+$/, ""), model);
 
@@ -146,7 +146,7 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
               {file && (
                 <div className="mt-4">
                   <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Модель транскрипции
+                    Модель транскрипции <span className="text-orange-400">*</span>
                   </label>
                   <div className="flex gap-2">
                     <button
@@ -188,10 +188,10 @@ export function UploadModal({ isOpen, onClose }: UploadModalProps) {
                 </button>
                 <button
                   onClick={handleUpload}
-                  disabled={!file}
+                  disabled={!file || !model}
                   className={cn(
                     "flex-1 py-3 rounded-xl font-medium transition-all",
-                    file
+                    file && model
                       ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600"
                       : "bg-slate-800 text-slate-500 cursor-not-allowed"
                   )}

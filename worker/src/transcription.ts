@@ -177,7 +177,7 @@ const TRANSCRIPTION_PROMPT = `Ты — профессиональная сист
 
 export async function transcribeAudio(
   gcsUri: string,
-  model: TranscriptionModel = 'gemini'
+  model: TranscriptionModel
 ): Promise<TranscriptionResult> {
   console.log(`[Transcription] ========================================`)
   console.log(`[Transcription] transcribeAudio called with model param: "${model}"`)
