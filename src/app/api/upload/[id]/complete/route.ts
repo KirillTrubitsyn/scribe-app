@@ -22,23 +22,31 @@ export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id: recordingId } = await params;
 
-    // Parse optional body for transcription model
-    let transcriptionModel: TranscriptionModel = "gemini";
-    try {
-      const body = await request.json();
-      console.log("[Upload Complete] Received body:", JSON.stringify(body));
-      if (body.transcription_model === "gemini" || body.transcription_model === "chirp") {
-        transcriptionModel = body.transcription_model;
-      }
-      console.log("[Upload Complete] Using transcription model:", transcriptionModel);
-    } catch (parseError) {
-      // Body is optional, default to gemini
-      console.log("[Upload Complete] No body or parse error, using default model:", transcriptionModel, parseError);
-    }
-
     if (!recordingId) {
       return NextResponse.json(
         { error: "Recording ID is required" },
+        { status: 400 }
+      );
+    }
+
+    // Parse body and require transcription model
+    let transcriptionModel: TranscriptionModel;
+    try {
+      const body = await request.json();
+      console.log("[Upload Complete] Received body:", JSON.stringify(body));
+
+      if (body.transcription_model !== "gemini" && body.transcription_model !== "chirp") {
+        return NextResponse.json(
+          { error: "Необходимо выбрать модель транскрипции (gemini или chirp)" },
+          { status: 400 }
+        );
+      }
+
+      transcriptionModel = body.transcription_model;
+      console.log("[Upload Complete] Using transcription model:", transcriptionModel);
+    } catch {
+      return NextResponse.json(
+        { error: "Необходимо выбрать модель транскрипции" },
         { status: 400 }
       );
     }
@@ -104,7 +112,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 async function triggerProcessing(
   supabase: ReturnType<typeof createAdminClient>,
   recording: Recording,
-  transcriptionModel: TranscriptionModel = "gemini"
+  transcriptionModel: TranscriptionModel
 ): Promise<boolean> {
   const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;

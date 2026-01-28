@@ -22,7 +22,7 @@ interface UseUploadReturn {
   progress: number;
   error: string | null;
   recordingId: string | null;
-  upload: (file: File, title: string, model?: TranscriptionModel) => Promise<string | null>;
+  upload: (file: File, title: string, model: TranscriptionModel) => Promise<string | null>;
   reset: () => void;
 }
 
@@ -43,7 +43,7 @@ export function useUpload(): UseUploadReturn {
     });
   }, []);
 
-  const upload = useCallback(async (file: File, title: string, model: TranscriptionModel = "gemini"): Promise<string | null> => {
+  const upload = useCallback(async (file: File, title: string, model: TranscriptionModel): Promise<string | null> => {
     setUploadState({
       state: "uploading",
       progress: 0,
