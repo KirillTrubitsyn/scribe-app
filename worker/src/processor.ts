@@ -50,10 +50,14 @@ export async function processRecording(request: ProcessingRequest): Promise<void
   const { recording_id, gcs_uri, transcription_model = 'gemini' } = request
   const jobId = uuidv4()
 
+  console.log(`[Processor] ========================================`)
   console.log(`[Processor] Starting processing for recording ${recording_id}`)
   console.log(`[Processor] GCS URI: ${gcs_uri}`)
   console.log(`[Processor] Job ID: ${jobId}`)
-  console.log(`[Processor] Transcription model: ${transcription_model}`)
+  console.log(`[Processor] Request transcription_model param: ${request.transcription_model || 'NOT PROVIDED'}`)
+  console.log(`[Processor] Using transcription model: ${transcription_model}`)
+  console.log(`[Processor] Model will be: ${transcription_model === 'chirp' ? 'CHIRP 3 Batch (Google Speech-to-Text V2)' : 'GEMINI 3 Flash'}`)
+  console.log(`[Processor] ========================================`)
 
   // Track job status
   activeJobs.set(recording_id, {

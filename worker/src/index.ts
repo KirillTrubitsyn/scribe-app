@@ -78,9 +78,11 @@ app.post('/process', authenticate, async (req: Request, res: Response) => {
       return
     }
 
-    const { recording_id, gcs_uri, organization_id, file_name, file_size } = req.body
+    const { recording_id, gcs_uri, organization_id, file_name, file_size, transcription_model } = req.body
 
     console.log(`[API] Received processing request for recording ${recording_id}`)
+    console.log(`[API] Request body transcription_model: ${transcription_model || 'NOT PROVIDED (will default to gemini)'}`)
+    console.log(`[API] Full request body:`, JSON.stringify({ recording_id, gcs_uri: gcs_uri?.substring(0, 50) + '...', organization_id, file_name, file_size, transcription_model }))
 
     // Check if already processing
     const existingJob = getJobStatus(recording_id)
@@ -93,12 +95,14 @@ app.post('/process', authenticate, async (req: Request, res: Response) => {
     }
 
     // Start processing asynchronously
+    console.log(`[API] Starting processRecording with model: ${transcription_model || 'gemini (default)'}`)
     processRecording({
       recording_id,
       gcs_uri,
       organization_id,
       file_name,
       file_size,
+      transcription_model,
     }).catch(error => {
       console.error(`[API] Background processing failed for ${recording_id}:`, error)
     })
