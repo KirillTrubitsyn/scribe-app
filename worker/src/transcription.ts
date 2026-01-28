@@ -56,7 +56,9 @@ interface WordWithMeta {
 const INLINE_DATA_LIMIT_BYTES = 4 * 1024 * 1024
 
 // Chirp configuration
-const CHIRP_LOCATION = 'us-central1'
+// Chirp 3 is available in: asia-south1, europe-west2, europe-west3, northamerica-northeast1
+// NOT available in us-central1!
+const CHIRP_LOCATION = 'europe-west2'
 const PAUSE_THRESHOLD_SECONDS = 2.0
 const POLL_INTERVAL_MS = 10000
 const MAX_POLL_TIME_MS = 60 * 60 * 1000 // 1 hour
