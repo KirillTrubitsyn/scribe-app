@@ -383,35 +383,40 @@ async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult>
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function pollChirpOperation(operation: any): Promise<IBatchRecognizeResponse> {
-  const startTime = Date.now()
-  let lastProgressLog = 0
+  console.log('[Transcription] Starting to poll operation...')
 
-  while (true) {
-    // Check if operation is complete
-    const [response] = await operation.promise()
-
-    if (response) {
-      console.log('[Transcription] Operation completed successfully')
-      return response as IBatchRecognizeResponse
-    }
-
-    // Check timeout
-    const elapsed = Date.now() - startTime
-    if (elapsed > MAX_POLL_TIME_MS) {
-      const minutes = Math.round(elapsed / 60000)
+  // Create a timeout promise that rejects after MAX_POLL_TIME_MS
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      const minutes = Math.round(MAX_POLL_TIME_MS / 60000)
       console.error(`[Transcription] Timeout after ${minutes} minutes`)
-      throw new Error('Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.')
-    }
+      reject(new Error('Превышено время обработки. Попробуйте загрузить файл меньшего размера или разделить длинную запись на части.'))
+    }, MAX_POLL_TIME_MS)
+  })
 
-    // Log progress periodically (every 30 seconds)
-    if (elapsed - lastProgressLog >= 30000) {
-      const minutes = Math.round(elapsed / 60000)
-      console.log(`[Transcription] Still processing... (${minutes} min elapsed)`)
-      lastProgressLog = elapsed
-    }
+  // Create a progress logging interval
+  const startTime = Date.now()
+  const progressInterval = setInterval(() => {
+    const elapsed = Date.now() - startTime
+    const minutes = Math.round(elapsed / 60000)
+    const seconds = Math.round((elapsed % 60000) / 1000)
+    console.log(`[Transcription] Still processing... (${minutes}m ${seconds}s elapsed)`)
+  }, 30000)
 
-    // Wait before next poll
-    await sleep(POLL_INTERVAL_MS)
+  try {
+    // Race between operation completion and timeout
+    // operation.promise() returns a promise that resolves when the LRO completes
+    console.log('[Transcription] Awaiting operation.promise() with timeout...')
+    const [response] = await Promise.race([
+      operation.promise(),
+      timeoutPromise,
+    ])
+
+    console.log('[Transcription] Operation completed successfully')
+    return response as IBatchRecognizeResponse
+  } finally {
+    // Clean up the progress interval
+    clearInterval(progressInterval)
   }
 }
 
