@@ -12,8 +12,8 @@
     "@google-cloud/speech": "^7.2.1",
     "@google-cloud/storage": "^7.18.0",
     "@google/genai": "^1.38.0",
-    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.91.1",
+    "elevenlabs": "^1.59.0",
     "express": "^4.21.0",
     "uuid": "^10.0.0"
   },
