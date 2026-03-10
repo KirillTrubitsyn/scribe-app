@@ -10,9 +10,9 @@ interface TriggerRequestBody {
   recording_id: string;
 }
 
-interface RailwayWorkerPayload {
+interface WorkerPayload {
   recording_id: string;
-  gcs_uri: string;
+  storage_path: string;
   organization_id: string;
   callback_url: string;
   file_name: string;
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
   const { recording_id } = body;
 
   // 2. Use user's Supabase client with RLS to verify access
-  // If user can fetch the recording, they have access (RLS enforces org membership)
   const supabase = await createClient();
   const { data: accessCheck, error: accessError } = await supabase
     .from("recordings")
@@ -127,9 +126,9 @@ export async function POST(request: Request) {
   }
 
   // 8. Send request to Railway worker
-  const workerPayload: RailwayWorkerPayload = {
+  const workerPayload: WorkerPayload = {
     recording_id: recording.id,
-    gcs_uri: recording.gcs_uri,
+    storage_path: recording.storage_path,
     organization_id: recording.organization_id,
     callback_url: `${appUrl}/api/webhook`,
     file_name: recording.file_name,
@@ -151,15 +150,11 @@ export async function POST(request: Request) {
       console.error(
         `[Trigger] Railway worker request failed: ${response.status} - ${errorText}`
       );
-      console.error(`[Trigger] Worker URL used: ${railwayWorkerUrl}`);
 
-      // Determine user-friendly error message based on status
       let userMessage = "Не удалось запустить обработку. Попробуйте снова.";
       if (response.status === 401) {
-        console.error("[Trigger] Authentication failed - check RAILWAY_WEBHOOK_SECRET matches on Vercel and Railway");
         userMessage = "Ошибка аутентификации сервиса обработки. Обратитесь к администратору.";
       } else if (response.status === 404) {
-        console.error("[Trigger] Worker endpoint not found - check RAILWAY_WEBHOOK_URL includes /process");
         userMessage = "Сервис обработки недоступен. Обратитесь к администратору.";
       }
 

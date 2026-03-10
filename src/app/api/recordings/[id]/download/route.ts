@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { generateDownloadSignedUrl } from "@/lib/google/storage";
+import { getSignedDownloadUrl } from "@/lib/supabase/storage";
 
 export async function GET(
   request: NextRequest,
@@ -13,7 +13,7 @@ export async function GET(
     // Get the recording from database
     const { data: recording, error } = await supabase
       .from("recordings")
-      .select("id, gcs_uri, file_name, title")
+      .select("id, storage_path, file_name, title")
       .eq("id", id)
       .single();
 
@@ -24,7 +24,7 @@ export async function GET(
       );
     }
 
-    if (!recording.gcs_uri) {
+    if (!recording.storage_path) {
       return NextResponse.json(
         { error: "Recording file not available" },
         { status: 404 }
@@ -32,7 +32,7 @@ export async function GET(
     }
 
     // Generate signed URL for download
-    const signedUrl = await generateDownloadSignedUrl(recording.gcs_uri);
+    const signedUrl = await getSignedDownloadUrl(recording.storage_path);
 
     return NextResponse.json({
       url: signedUrl,

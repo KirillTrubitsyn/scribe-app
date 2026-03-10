@@ -8,9 +8,9 @@ interface RouteParams {
 
 type TranscriptionModel = "gemini" | "chirp";
 
-interface RailwayWorkerPayload {
+interface WorkerPayload {
   recording_id: string;
-  gcs_uri: string;
+  storage_path: string;
   organization_id: string;
   callback_url: string;
   file_name: string;
@@ -122,7 +122,6 @@ async function triggerProcessing(
     console.warn(
       "[Upload] Railway worker not configured, skipping auto-trigger"
     );
-    // Set error status so user knows processing cannot start
     await supabase
       .from("recordings")
       .update({
@@ -148,9 +147,9 @@ async function triggerProcessing(
       .eq("id", recording.id);
 
     // Prepare payload for Railway worker
-    const payload: RailwayWorkerPayload = {
+    const payload: WorkerPayload = {
       recording_id: recording.id,
-      gcs_uri: recording.gcs_uri,
+      storage_path: recording.storage_path,
       organization_id: recording.organization_id,
       callback_url: `${appUrl}/api/webhook`,
       file_name: recording.file_name,
@@ -173,19 +172,14 @@ async function triggerProcessing(
       console.error(
         `[Upload] Railway worker request failed: ${response.status} - ${errorText}`
       );
-      console.error(`[Upload] Worker URL used: ${railwayWorkerUrl}`);
 
-      // Determine user-friendly error message based on status
       let userMessage = "Не удалось запустить обработку. Попробуйте снова.";
       if (response.status === 401) {
-        console.error("[Upload] Authentication failed - check RAILWAY_WEBHOOK_SECRET matches on Vercel and Railway");
         userMessage = "Ошибка аутентификации сервиса обработки. Обратитесь к администратору.";
       } else if (response.status === 404) {
-        console.error("[Upload] Worker endpoint not found - check RAILWAY_WEBHOOK_URL includes /process");
         userMessage = "Сервис обработки недоступен. Обратитесь к администратору.";
       }
 
-      // Set error status so user can see and retry
       await supabase
         .from("recordings")
         .update({
@@ -206,7 +200,6 @@ async function triggerProcessing(
   } catch (error) {
     console.error("[Upload] Failed to trigger processing:", error);
 
-    // Set error status so user can see and retry
     await supabase
       .from("recordings")
       .update({

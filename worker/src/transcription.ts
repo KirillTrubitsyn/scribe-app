@@ -1,4 +1,4 @@
-import { Storage } from '@google-cloud/storage'
+import { createClient } from '@supabase/supabase-js'
 import { GoogleGenAI, ThinkingLevel } from '@google/genai'
 import { v2, protos } from '@google-cloud/speech'
 import type { TranscriptSegment } from './supabase.js'
@@ -56,16 +56,16 @@ interface WordWithMeta {
 const INLINE_DATA_LIMIT_BYTES = 4 * 1024 * 1024
 
 // Chirp configuration
-// Chirp 3 is available in: asia-south1, europe-west2, europe-west3, northamerica-northeast1
-// NOT available in us-central1!
 const CHIRP_LOCATION = 'europe-west2'
 const PAUSE_THRESHOLD_SECONDS = 2.0
-const POLL_INTERVAL_MS = 10000
 const MAX_POLL_TIME_MS = 60 * 60 * 1000 // 1 hour
 
 // Gemini File API configuration
 const GEMINI_FILE_POLL_INTERVAL_MS = 2000
 const GEMINI_FILE_MAX_POLL_TIME_MS = 10 * 60 * 1000 // 10 minutes
+
+// Supabase Storage bucket
+const STORAGE_BUCKET = 'audio-files'
 
 function getGoogleCredentials(): { projectId: string; credentials: object } {
   const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
@@ -85,13 +85,35 @@ function getGoogleCredentials(): { projectId: string; credentials: object } {
   }
 }
 
-function getStorageClient(): Storage {
-  const { projectId, credentials } = getGoogleCredentials()
+function getSupabaseStorageClient() {
+  const supabaseUrl = process.env.SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  return new Storage({
-    projectId,
-    credentials,
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables')
+  }
+
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
   })
+}
+
+/**
+ * Generate a signed download URL for a file in Supabase Storage.
+ * This URL can be used by external services (Gemini, Chirp) to fetch the audio.
+ */
+async function getSignedDownloadUrl(storagePath: string, expiresIn = 3600): Promise<string> {
+  const supabase = getSupabaseStorageClient()
+
+  const { data, error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .createSignedUrl(storagePath, expiresIn)
+
+  if (error) {
+    throw new Error(`Failed to create signed download URL: ${error.message}`)
+  }
+
+  return data.signedUrl
 }
 
 function getGeminiClient() {
@@ -176,37 +198,37 @@ const TRANSCRIPTION_PROMPT = `Ты — профессиональная сист
 // ============================================
 
 export async function transcribeAudio(
-  gcsUri: string,
+  storagePath: string,
   model: TranscriptionModel
 ): Promise<TranscriptionResult> {
   console.log(`[Transcription] ========================================`)
   console.log(`[Transcription] transcribeAudio called with model param: "${model}"`)
-  console.log(`[Transcription] GCS URI: ${gcsUri}`)
+  console.log(`[Transcription] Storage path: ${storagePath}`)
   console.log(`[Transcription] Model routing decision: model === 'chirp' ? ${model === 'chirp'}`)
 
   if (model === 'chirp') {
     console.log(`[Transcription] >>> ROUTING TO CHIRP 3 <<<`)
     console.log(`[Transcription] ========================================`)
-    return transcribeWithChirp(gcsUri)
+    return transcribeWithChirp(storagePath)
   }
 
   console.log(`[Transcription] >>> ROUTING TO GEMINI 3 FLASH <<<`)
   console.log(`[Transcription] ========================================`)
-  return transcribeWithGemini(gcsUri)
+  return transcribeWithGemini(storagePath)
 }
 
 // ============================================
 // Gemini Transcription
 // ============================================
 
-async function transcribeWithGemini(gcsUri: string): Promise<TranscriptionResult> {
+async function transcribeWithGemini(storagePath: string): Promise<TranscriptionResult> {
   console.log(`[Transcription] *** GEMINI 3 FLASH TRANSCRIPTION STARTED ***`)
   console.log(`[Transcription] Calling Google Gemini API (model: gemini-3-flash-preview)`)
 
   try {
-    // 1. Download audio from GCS
-    console.log('[Transcription] Downloading audio from GCS...')
-    const audioData = await downloadFromGcs(gcsUri)
+    // 1. Download audio from Supabase Storage via signed URL
+    console.log('[Transcription] Downloading audio from Supabase Storage...')
+    const audioData = await downloadFromStorage(storagePath)
     console.log(`[Transcription] Downloaded ${audioData.size} bytes, mime: ${audioData.mimeType}`)
 
     // 2. Send to Gemini for transcription
@@ -302,7 +324,6 @@ async function transcribeWithGemini(gcsUri: string): Promise<TranscriptionResult
     const rawError = error instanceof Error ? error.message : String(error)
     console.error('[Transcription] Error:', rawError)
 
-    // Convert to user-friendly message
     const userMessage = parseTranscriptionError(rawError)
     throw new Error(userMessage)
   }
@@ -312,37 +333,37 @@ async function transcribeWithGemini(gcsUri: string): Promise<TranscriptionResult
 // Chirp 3 Dynamic Batch Transcription
 // ============================================
 
-async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult> {
+async function transcribeWithChirp(storagePath: string): Promise<TranscriptionResult> {
   console.log(`[Transcription] *** CHIRP 3 BATCH TRANSCRIPTION STARTED ***`)
   console.log(`[Transcription] Calling Google Speech-to-Text V2 API (model: chirp_3)`)
 
   try {
+    // Generate a signed URL for the audio file — Chirp batch API accepts HTTPS URIs
+    console.log('[Transcription] Generating signed URL for Chirp access...')
+    const audioUrl = await getSignedDownloadUrl(storagePath, 3600)
+    console.log('[Transcription] Signed URL generated successfully')
+
     const client = getSpeechClient()
     const { projectId } = getGoogleCredentials()
 
     // Build recognizer path for v2 API (using regional location)
     const recognizerPath = `projects/${projectId}/locations/${CHIRP_LOCATION}/recognizers/_`
 
-    // Start Batch Recognition with Chirp 3
+    // Start Batch Recognition with Chirp 3 using signed URL
     console.log('[Transcription] Initiating batch recognition operation...')
 
     const [operation] = await client.batchRecognize({
       recognizer: recognizerPath,
       config: {
-        // Auto-detect audio encoding
         autoDecodingConfig: {},
-        // Language codes with Russian primary, English fallback
         languageCodes: ['ru-RU', 'en-US'],
-        // Chirp 3 HD model for best quality batch processing
         model: 'chirp_3',
         features: {
-          // Enable word-level timestamps
           enableWordTimeOffsets: true,
         },
       },
-      files: [{ uri: gcsUri }],
+      files: [{ uri: audioUrl }],
       recognitionOutputConfig: {
-        // Return results inline (not to GCS)
         inlineResponseConfig: {},
       },
     })
@@ -355,12 +376,11 @@ async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult>
 
     // Parse and return results
     console.log('[Transcription] Processing results...')
-    return processChirpResponse(response, gcsUri)
+    return processChirpResponse(response)
   } catch (error) {
     const rawError = error instanceof Error ? error.message : String(error)
     console.error('[Transcription] API error:', rawError)
 
-    // Check if the error is already user-friendly
     const isAlreadyUserFriendly =
       !rawError.includes('@') &&
       !rawError.includes('gserviceaccount.com') &&
@@ -371,7 +391,6 @@ async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult>
       throw error
     }
 
-    // Parse and convert to user-friendly message
     const userMessage = parseTranscriptionError(rawError)
     throw new Error(userMessage)
   }
@@ -385,7 +404,6 @@ async function transcribeWithChirp(gcsUri: string): Promise<TranscriptionResult>
 async function pollChirpOperation(operation: any): Promise<IBatchRecognizeResponse> {
   console.log('[Transcription] Starting to poll operation...')
 
-  // Create a timeout promise that rejects after MAX_POLL_TIME_MS
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
       const minutes = Math.round(MAX_POLL_TIME_MS / 60000)
@@ -394,7 +412,6 @@ async function pollChirpOperation(operation: any): Promise<IBatchRecognizeRespon
     }, MAX_POLL_TIME_MS)
   })
 
-  // Create a progress logging interval
   const startTime = Date.now()
   const progressInterval = setInterval(() => {
     const elapsed = Date.now() - startTime
@@ -404,8 +421,6 @@ async function pollChirpOperation(operation: any): Promise<IBatchRecognizeRespon
   }, 30000)
 
   try {
-    // Race between operation completion and timeout
-    // operation.promise() returns a promise that resolves when the LRO completes
     console.log('[Transcription] Awaiting operation.promise() with timeout...')
     const [response] = await Promise.race([
       operation.promise(),
@@ -415,13 +430,8 @@ async function pollChirpOperation(operation: any): Promise<IBatchRecognizeRespon
     console.log('[Transcription] Operation completed successfully')
     return response as IBatchRecognizeResponse
   } finally {
-    // Clean up the progress interval
     clearInterval(progressInterval)
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // ============================================
@@ -429,19 +439,22 @@ function sleep(ms: number): Promise<void> {
 // ============================================
 
 function processChirpResponse(
-  response: IBatchRecognizeResponse,
-  gcsUri: string
+  response: IBatchRecognizeResponse
 ): TranscriptionResult {
   console.log('[Transcription] Response keys:', Object.keys(response))
 
   const results = response.results || {}
   console.log('[Transcription] Results keys:', Object.keys(results))
 
-  const fileResult = results[gcsUri] as IBatchRecognizeFileResult | undefined
+  // When using inline content, the key may differ from GCS URI
+  const resultKeys = Object.keys(results)
+  const fileResult = resultKeys.length > 0
+    ? results[resultKeys[0]] as IBatchRecognizeFileResult
+    : undefined
 
   if (!fileResult) {
-    console.log('[Transcription] No file result found for URI:', gcsUri)
-    console.log('[Transcription] Available URIs:', Object.keys(results))
+    console.log('[Transcription] No file result found')
+    console.log('[Transcription] Available keys:', resultKeys)
     return createEmptyResult()
   }
 
@@ -501,10 +514,8 @@ function processChirpResponse(
   // Detect primary language from first result
   const detectedLanguage = transcriptResults[0]?.languageCode || 'ru-RU'
 
-  // Calculate total word count
   const wordCount = allWords.length
 
-  // Build speaker data
   const speakers: SpeakerData[] = Array.from(speakerSet)
     .sort((a, b) => a - b)
     .map(index => ({
@@ -552,7 +563,6 @@ function extractAllWords(results: ISpeechRecognitionResult[]): WordWithMeta[] {
     }
   }
 
-  // Sort by start time
   words.sort((a, b) => a.start - b.start)
 
   return words
@@ -623,7 +633,7 @@ function createChirpSegment(words: WordWithMeta[], speakerTag: number): Transcri
 }
 
 // ============================================
-// GCS Download
+// Supabase Storage Download
 // ============================================
 
 interface AudioData {
@@ -633,27 +643,20 @@ interface AudioData {
   mimeType: string
 }
 
-async function downloadFromGcs(gcsUri: string): Promise<AudioData> {
-  // Parse GCS URI: gs://bucket-name/path/to/file
-  const match = gcsUri.match(/^gs:\/\/([^/]+)\/(.+)$/)
+async function downloadFromStorage(storagePath: string): Promise<AudioData> {
+  console.log(`[Transcription] Downloading from Supabase Storage: ${storagePath}`)
 
-  if (!match) {
-    throw new Error(`Invalid GCS URI format: ${gcsUri}`)
+  const signedUrl = await getSignedDownloadUrl(storagePath)
+
+  const response = await fetch(signedUrl)
+  if (!response.ok) {
+    throw new Error(`Failed to download audio: HTTP ${response.status}`)
   }
 
-  const [, bucketName, filePath] = match
+  const arrayBuffer = await response.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
 
-  const storage = getStorageClient()
-  const bucket = storage.bucket(bucketName)
-  const file = bucket.file(filePath)
-
-  // Download file content
-  const [buffer] = await file.download()
-
-  // Determine MIME type from file extension
-  const mimeType = getMimeType(filePath)
-
-  // Convert to base64
+  const mimeType = getMimeType(storagePath)
   const base64 = buffer.toString('base64')
 
   return {
@@ -662,6 +665,14 @@ async function downloadFromGcs(gcsUri: string): Promise<AudioData> {
     base64,
     mimeType,
   }
+}
+
+/**
+ * Get a signed download URL that external services can use to fetch the audio.
+ * This is the URL that will be passed to ElevenLabs API as cloud_storage_url.
+ */
+export async function getAudioDownloadUrl(storagePath: string): Promise<string> {
+  return getSignedDownloadUrl(storagePath, 3600)
 }
 
 function getMimeType(filePath: string): string {
@@ -703,16 +714,13 @@ async function uploadToGeminiFileAPI(
 ): Promise<string> {
   console.log('[Transcription] Uploading to Gemini File API...')
 
-  // Create temp file
   const tempDir = mkdtempSync(join(tmpdir(), 'scribe-'))
   const ext = getExtensionFromMimeType(audioData.mimeType)
   const tempFilePath = join(tempDir, `audio.${ext}`)
 
   try {
-    // Write buffer to temp file
     writeFileSync(tempFilePath, audioData.buffer)
 
-    // Upload using File API
     const uploadResult = await genAI.files.upload({
       file: tempFilePath,
       config: {
@@ -722,7 +730,6 @@ async function uploadToGeminiFileAPI(
 
     console.log(`[Transcription] File uploaded: ${uploadResult.name}, state: ${uploadResult.state}`)
 
-    // Wait for file to be processed with timeout
     let file = uploadResult
     const fileUploadStartTime = Date.now()
     let lastFileProgressLog = 0
@@ -730,14 +737,12 @@ async function uploadToGeminiFileAPI(
     while (file.state === 'PROCESSING') {
       const elapsed = Date.now() - fileUploadStartTime
 
-      // Check timeout
       if (elapsed > GEMINI_FILE_MAX_POLL_TIME_MS) {
         const minutes = Math.round(elapsed / 60000)
         console.error(`[Transcription] Gemini File API timeout after ${minutes} minutes`)
         throw new Error('Превышено время загрузки файла в Gemini. Попробуйте загрузить файл меньшего размера.')
       }
 
-      // Log progress periodically (every 30 seconds)
       if (elapsed - lastFileProgressLog >= 30000) {
         const minutes = Math.round(elapsed / 60000)
         console.log(`[Transcription] File still processing... (${minutes} min elapsed)`)
@@ -756,7 +761,6 @@ async function uploadToGeminiFileAPI(
     console.log(`[Transcription] File ready: ${file.uri}`)
     return file.uri!
   } finally {
-    // Clean up temp file
     try {
       unlinkSync(tempFilePath)
     } catch {
@@ -772,13 +776,11 @@ async function uploadToGeminiFileAPI(
 function parseGeminiTranscriptResponse(response: string): GeminiTranscriptResponse | null {
   let jsonStr = response.trim()
 
-  // Remove markdown code block if present
   const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
   if (jsonMatch) {
     jsonStr = jsonMatch[1].trim()
   }
 
-  // Try to find JSON object in the response
   const objectMatch = jsonStr.match(/\{[\s\S]*\}/)
   if (objectMatch) {
     jsonStr = objectMatch[0]
@@ -799,8 +801,8 @@ function convertGeminiToSegments(geminiSegments: GeminiTranscriptSegment[]): Tra
     start: seg.start,
     end: seg.end,
     text: seg.text,
-    confidence: 0.95, // Gemini doesn't provide confidence, use default
-    words: [], // Word-level data not available from Gemini
+    confidence: 0.95,
+    words: [],
   }))
 }
 
