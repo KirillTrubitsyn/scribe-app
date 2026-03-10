@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
-import { generateDownloadSignedUrl, deleteFile } from "@/lib/google/storage";
+import { getSignedDownloadUrl, deleteFile } from "@/lib/supabase/storage";
 import type { Recording, Transcript, Artifact, Speaker } from "@/types/database";
 
 type RecordingWithRelations = Recording & {
@@ -35,7 +35,6 @@ export async function GET(
     }
 
     // Fetch related data with separate queries for reliability
-    // This avoids potential issues with PostgREST FK detection
     const [transcriptsResult, artifactsResult, speakersResult] = await Promise.all([
       supabase.from("transcripts").select("*").eq("recording_id", id),
       supabase.from("artifacts").select("*").eq("recording_id", id),
@@ -63,9 +62,9 @@ export async function GET(
 
     // Generate audio URL if file exists and not still uploading
     let audioUrl: string | null = null;
-    if (recording.gcs_uri && recording.status !== "uploading") {
+    if (recording.storage_path && recording.status !== "uploading") {
       try {
-        audioUrl = await generateDownloadSignedUrl(recording.gcs_uri);
+        audioUrl = await getSignedDownloadUrl(recording.storage_path);
       } catch (e) {
         console.error("Failed to generate audio URL:", e);
       }
@@ -142,10 +141,10 @@ export async function DELETE(
     const { id } = await params;
     const adminClient = createAdminClient();
 
-    // Get the recording to find the GCS URI
+    // Get the recording to find the storage path
     const { data: recording, error: fetchError } = await adminClient
       .from("recordings")
-      .select("id, gcs_uri")
+      .select("id, storage_path")
       .eq("id", id)
       .single();
 
@@ -156,13 +155,13 @@ export async function DELETE(
       );
     }
 
-    // Delete file from GCS if it exists
-    if (recording.gcs_uri) {
+    // Delete file from Supabase Storage if it exists
+    if (recording.storage_path) {
       try {
-        await deleteFile(recording.gcs_uri);
+        await deleteFile(recording.storage_path);
       } catch (e) {
-        console.error("Failed to delete file from GCS:", e);
-        // Continue with database deletion even if GCS deletion fails
+        console.error("Failed to delete file from storage:", e);
+        // Continue with database deletion even if storage deletion fails
       }
     }
 

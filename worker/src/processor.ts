@@ -12,7 +12,7 @@ import {
 
 export interface ProcessingRequest {
   recording_id: string
-  gcs_uri: string
+  storage_path: string
   organization_id: string
   callback_url?: string
   file_name: string
@@ -47,7 +47,7 @@ export function getAllActiveJobs(): ProcessingStatus[] {
 // ============================================
 
 export async function processRecording(request: ProcessingRequest): Promise<void> {
-  const { recording_id, gcs_uri, transcription_model } = request
+  const { recording_id, storage_path, transcription_model } = request
   const jobId = uuidv4()
 
   // Validate that transcription_model is provided
@@ -57,7 +57,7 @@ export async function processRecording(request: ProcessingRequest): Promise<void
 
   console.log(`[Processor] ========================================`)
   console.log(`[Processor] Starting processing for recording ${recording_id}`)
-  console.log(`[Processor] GCS URI: ${gcs_uri}`)
+  console.log(`[Processor] Storage path: ${storage_path}`)
   console.log(`[Processor] Job ID: ${jobId}`)
   console.log(`[Processor] Transcription model: ${transcription_model}`)
   console.log(`[Processor] Model will be: ${transcription_model === 'chirp' ? 'CHIRP 3 Batch (Google Speech-to-Text V2)' : 'GEMINI 3 Flash'}`)
@@ -83,7 +83,7 @@ export async function processRecording(request: ProcessingRequest): Promise<void
 
     // 2. Run transcription
     console.log(`[Processor] Step 2: Starting transcription with ${transcription_model}`)
-    const transcriptionResult = await transcribeAudio(gcs_uri, transcription_model)
+    const transcriptionResult = await transcribeAudio(storage_path, transcription_model)
 
     console.log(`[Processor] Transcription completed: ${transcriptionResult.transcript.word_count} words`)
 
@@ -152,7 +152,7 @@ export function isValidProcessingRequest(body: unknown): body is ProcessingReque
 
   return (
     typeof request.recording_id === 'string' &&
-    typeof request.gcs_uri === 'string' &&
+    typeof request.storage_path === 'string' &&
     typeof request.organization_id === 'string' &&
     typeof request.file_name === 'string' &&
     typeof request.file_size === 'number'

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { getStorageClient } from "@/lib/google/storage";
-import { getBucketName } from "@/lib/google/credentials";
+import { getSignedUploadUrl } from "@/lib/supabase/storage";
 import type { RecordingInsert } from "@/types/database";
 
 // Development organization UUID for anonymous uploads
@@ -62,24 +61,20 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique file path
+    // Generate unique file path for Supabase Storage
     const recordingId = randomUUID();
-    const fileExtension = fileName.split(".").pop() || "mp3";
-    const gcsFileName = `recordings/${recordingId}/${fileName}`;
-    const gcsUri = `gs://${getBucketName()}/${gcsFileName}`;
+    const storagePath = `${DEV_ORGANIZATION_ID}/${recordingId}/${fileName}`;
 
     // Use admin client for database operations to bypass RLS
     const adminClient = createAdminClient();
 
     // Create recording in database with 'uploading' status
-    // For now, use dev organization for all uploads (proper org lookup can be added later)
-    // Set user_id to actual user if authenticated, or null for anonymous uploads
     const { error: dbError } = await adminClient.from("recordings").insert({
       id: recordingId,
       organization_id: DEV_ORGANIZATION_ID,
       user_id: user?.id || null,
-      title: title || fileName.replace(/\.[^/.]+$/, ""), // Remove extension if no title
-      gcs_uri: gcsUri,
+      title: title || fileName.replace(/\.[^/.]+$/, ""),
+      storage_path: storagePath,
       file_name: fileName,
       file_size: fileSize,
       duration_seconds: null,
@@ -95,17 +90,8 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate signed URL for direct upload to GCS
-    const storage = getStorageClient();
-    const bucket = storage.bucket(getBucketName());
-    const file = bucket.file(gcsFileName);
-
-    const [uploadUrl] = await file.getSignedUrl({
-      version: "v4",
-      action: "write",
-      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-      contentType,
-    });
+    // Generate signed URL for direct upload to Supabase Storage
+    const uploadUrl = await getSignedUploadUrl(storagePath);
 
     return NextResponse.json({
       recordingId,

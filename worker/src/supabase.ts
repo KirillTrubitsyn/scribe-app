@@ -24,7 +24,7 @@ export interface Recording {
   organization_id: string
   user_id: string | null
   title: string
-  gcs_uri: string
+  storage_path: string
   file_name: string
   file_size: number
   duration_seconds: number | null
