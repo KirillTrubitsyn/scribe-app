@@ -22,9 +22,3 @@ export interface UploadProgress {
   total: number
   percentage: number
 }
-
-export interface UploadResult {
-  gcsUri: string
-  fileName: string
-  fileSize: number
-}
