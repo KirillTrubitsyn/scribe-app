@@ -80,7 +80,7 @@ export interface ProcessingJob {
   recording_id: string
   job_type: JobType
   status: JobStatus
-  google_operation_name: string | null
+  operation_name: string | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
@@ -200,7 +200,7 @@ export async function createProcessingJob(
       started_at: null,
       completed_at: null,
       error_message: null,
-      google_operation_name: null,
+      operation_name: null,
     })
     .select()
     .single()

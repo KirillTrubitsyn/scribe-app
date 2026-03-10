@@ -98,7 +98,7 @@ export type ProcessingJob = {
   recording_id: string
   job_type: JobType
   status: JobStatus
-  google_operation_name: string | null
+  operation_name: string | null
   started_at: string | null
   completed_at: string | null
   error_message: string | null
@@ -140,13 +140,13 @@ export type SpeakerInsert = Omit<Speaker, 'id'> & {
 
 export type ProcessingJobInsert = Omit<
   ProcessingJob,
-  'id' | 'created_at' | 'completed_at' | 'error_message' | 'google_operation_name' | 'started_at'
+  'id' | 'created_at' | 'completed_at' | 'error_message' | 'operation_name' | 'started_at'
 > & {
   id?: string
   created_at?: string
   completed_at?: string | null
   error_message?: string | null
-  google_operation_name?: string | null
+  operation_name?: string | null
   started_at?: string | null
 }
 
