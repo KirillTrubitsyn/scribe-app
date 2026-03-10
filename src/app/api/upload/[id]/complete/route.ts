@@ -6,8 +6,6 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-type TranscriptionModel = "gemini" | "chirp";
-
 interface WorkerPayload {
   recording_id: string;
   storage_path: string;
@@ -15,7 +13,6 @@ interface WorkerPayload {
   callback_url: string;
   file_name: string;
   file_size: number;
-  transcription_model?: TranscriptionModel;
 }
 
 export async function POST(request: Request, { params }: RouteParams) {
@@ -25,28 +22,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!recordingId) {
       return NextResponse.json(
         { error: "Recording ID is required" },
-        { status: 400 }
-      );
-    }
-
-    // Parse body and require transcription model
-    let transcriptionModel: TranscriptionModel;
-    try {
-      const body = await request.json();
-      console.log("[Upload Complete] Received body:", JSON.stringify(body));
-
-      if (body.transcription_model !== "gemini" && body.transcription_model !== "chirp") {
-        return NextResponse.json(
-          { error: "Необходимо выбрать модель транскрипции (gemini или chirp)" },
-          { status: 400 }
-        );
-      }
-
-      transcriptionModel = body.transcription_model;
-      console.log("[Upload Complete] Using transcription model:", transcriptionModel);
-    } catch {
-      return NextResponse.json(
-        { error: "Необходимо выбрать модель транскрипции" },
         { status: 400 }
       );
     }
@@ -90,7 +65,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Automatically trigger processing
-    const processingStarted = await triggerProcessing(supabase, recording, transcriptionModel);
+    const processingStarted = await triggerProcessing(supabase, recording);
 
     return NextResponse.json({
       success: true,
@@ -111,8 +86,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
 async function triggerProcessing(
   supabase: ReturnType<typeof createAdminClient>,
-  recording: Recording,
-  transcriptionModel: TranscriptionModel
+  recording: Recording
 ): Promise<boolean> {
   const railwayWorkerUrl = process.env.RAILWAY_WEBHOOK_URL;
   const railwaySecret = process.env.RAILWAY_WEBHOOK_SECRET;
@@ -154,7 +128,6 @@ async function triggerProcessing(
       callback_url: `${appUrl}/api/webhook`,
       file_name: recording.file_name,
       file_size: recording.file_size,
-      transcription_model: transcriptionModel,
     };
 
     // Send request to Railway worker

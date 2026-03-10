@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
-import { transcribeAudio, TranscriptionModel } from './transcription.js'
+import { transcribeAudio } from './transcription.js'
 import {
   sendProcessingStarted,
   sendTranscriptionCompleted,
@@ -17,7 +17,6 @@ export interface ProcessingRequest {
   callback_url?: string
   file_name: string
   file_size: number
-  transcription_model?: TranscriptionModel
 }
 
 export interface ProcessingStatus {
@@ -47,20 +46,14 @@ export function getAllActiveJobs(): ProcessingStatus[] {
 // ============================================
 
 export async function processRecording(request: ProcessingRequest): Promise<void> {
-  const { recording_id, storage_path, transcription_model } = request
+  const { recording_id, storage_path } = request
   const jobId = uuidv4()
-
-  // Validate that transcription_model is provided
-  if (!transcription_model || (transcription_model !== 'gemini' && transcription_model !== 'chirp')) {
-    throw new Error('transcription_model is required and must be either "gemini" or "chirp"')
-  }
 
   console.log(`[Processor] ========================================`)
   console.log(`[Processor] Starting processing for recording ${recording_id}`)
   console.log(`[Processor] Storage path: ${storage_path}`)
   console.log(`[Processor] Job ID: ${jobId}`)
-  console.log(`[Processor] Transcription model: ${transcription_model}`)
-  console.log(`[Processor] Model will be: ${transcription_model === 'chirp' ? 'CHIRP 3 Batch (Google Speech-to-Text V2)' : 'GEMINI 3 Flash'}`)
+  console.log(`[Processor] Transcription engine: ElevenLabs Scribe v2`)
   console.log(`[Processor] ========================================`)
 
   // Track job status
@@ -82,8 +75,8 @@ export async function processRecording(request: ProcessingRequest): Promise<void
     })
 
     // 2. Run transcription
-    console.log(`[Processor] Step 2: Starting transcription with ${transcription_model}`)
-    const transcriptionResult = await transcribeAudio(storage_path, transcription_model)
+    console.log('[Processor] Step 2: Starting transcription with ElevenLabs Scribe v2')
+    const transcriptionResult = await transcribeAudio(storage_path)
 
     console.log(`[Processor] Transcription completed: ${transcriptionResult.transcript.word_count} words`)
 
