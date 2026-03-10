@@ -78,11 +78,10 @@ app.post('/process', authenticate, async (req: Request, res: Response) => {
       return
     }
 
-    const { recording_id, storage_path, organization_id, file_name, file_size, transcription_model } = req.body
+    const { recording_id, storage_path, organization_id, file_name, file_size } = req.body
 
     console.log(`[API] Received processing request for recording ${recording_id}`)
-    console.log(`[API] Request body transcription_model: ${transcription_model || 'NOT PROVIDED (will default to gemini)'}`)
-    console.log(`[API] Full request body:`, JSON.stringify({ recording_id, storage_path: storage_path?.substring(0, 50) + '...', organization_id, file_name, file_size, transcription_model }))
+    console.log(`[API] Full request body:`, JSON.stringify({ recording_id, storage_path: storage_path?.substring(0, 50) + '...', organization_id, file_name, file_size }))
 
     // Check if already processing
     const existingJob = getJobStatus(recording_id)
@@ -95,14 +94,13 @@ app.post('/process', authenticate, async (req: Request, res: Response) => {
     }
 
     // Start processing asynchronously
-    console.log(`[API] Starting processRecording with model: ${transcription_model || 'gemini (default)'}`)
+    console.log(`[API] Starting processRecording with ElevenLabs Scribe v2`)
     processRecording({
       recording_id,
       storage_path,
       organization_id,
       file_name,
       file_size,
-      transcription_model,
     }).catch(error => {
       console.error(`[API] Background processing failed for ${recording_id}:`, error)
     })

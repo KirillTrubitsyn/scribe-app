@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { X, Mic, Square, Pause, Play, CheckCircle, AlertCircle } from "lucide-react";
 import { useRecording } from "@/hooks/use-recording";
-import { useUpload, TranscriptionModel } from "@/hooks/use-upload";
+import { useUpload } from "@/hooks/use-upload";
 
 interface RecordingModalProps {
   isOpen: boolean;
@@ -22,7 +22,6 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [showTitleInput, setShowTitleInput] = useState(false);
-  const [model, setModel] = useState<TranscriptionModel | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -53,7 +52,6 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
       resetUpload();
       setTitle("");
       setShowTitleInput(false);
-      setModel(null);
       setIsSubmitting(false);
     }
   }, [isOpen, resetRecording, resetUpload]);
@@ -79,7 +77,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   }, [uploadState, onClose]);
 
   const handleUpload = async () => {
-    if (!audioBlob || !model || isSubmitting) return;
+    if (!audioBlob || isSubmitting) return;
 
     setIsSubmitting(true);
 
@@ -91,7 +89,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
     const file = new File([audioBlob], fileName, { type: contentType });
 
     const recordingTitle = title.trim() || `Запись ${new Date().toLocaleDateString("ru-RU")}`;
-    const result = await upload(file, recordingTitle, model);
+    const result = await upload(file, recordingTitle);
 
     if (result) {
       setTimeout(() => {
@@ -201,7 +199,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                 </div>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-6">
                 <label htmlFor="recording-title" className="block text-sm font-medium text-slate-300 mb-2">
                   Название записи
                 </label>
@@ -214,39 +212,6 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                   className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
                   autoFocus
                 />
-              </div>
-
-              {/* Model Switcher */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Модель транскрипции <span className="text-orange-400">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setModel("gemini")}
-                    className={cn(
-                      "flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all",
-                      model === "gemini"
-                        ? "bg-orange-500/20 text-orange-400 border border-orange-500/50"
-                        : "bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700"
-                    )}
-                  >
-                    Gemini 3 Flash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setModel("chirp")}
-                    className={cn(
-                      "flex-1 py-2.5 px-4 rounded-lg font-medium text-sm transition-all",
-                      model === "chirp"
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/50"
-                        : "bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700"
-                    )}
-                  >
-                    Chirp 3 Batch
-                  </button>
-                </div>
               </div>
 
               <div className="flex gap-3">
@@ -263,13 +228,8 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                 </button>
                 <button
                   onClick={handleUpload}
-                  disabled={isSubmitting || !model}
-                  className={cn(
-                    "flex-1 py-3 rounded-xl font-medium transition-all disabled:cursor-not-allowed",
-                    model
-                      ? "bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 disabled:opacity-50"
-                      : "bg-slate-800 text-slate-500"
-                  )}
+                  disabled={isSubmitting}
+                  className="flex-1 py-3 rounded-xl font-medium transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? "Сохранение..." : "Сохранить"}
                 </button>

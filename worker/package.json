@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@google-cloud/speech": "^7.2.1",
     "@google/genai": "^1.38.0",
     "@supabase/supabase-js": "^2.91.1",
     "elevenlabs": "^1.59.0",
