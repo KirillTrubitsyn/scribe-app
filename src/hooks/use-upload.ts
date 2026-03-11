@@ -11,10 +11,8 @@ interface UploadProgress {
   recordingId: string | null;
 }
 
-interface InitUploadResponse {
+interface UploadResponse {
   recordingId: string;
-  uploadUrl: string;
-  contentType: string;
 }
 
 interface UseUploadReturn {
@@ -52,41 +50,14 @@ export function useUpload(): UseUploadReturn {
     });
 
     try {
-      // Step 1: Initialize upload - create recording and get signed URL
-      const initResponse = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileSize: file.size,
-          contentType: file.type,
-          title,
-        }),
-      });
-
-      if (!initResponse.ok) {
-        const error = await initResponse.json();
-        throw new Error(error.error || "Не удалось инициализировать загрузку");
-      }
-
-      const { recordingId, uploadUrl, contentType }: InitUploadResponse = await initResponse.json();
-
-      setUploadState((prev) => ({
-        ...prev,
-        recordingId,
-        progress: 5,
-      }));
-
-      // Step 2: Upload file directly to Supabase Storage using signed URL
-      await new Promise<void>((resolve, reject) => {
+      // Step 1: Upload file to our API (server proxies to Supabase Storage)
+      const recordingId = await new Promise<string>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
 
         xhr.upload.addEventListener("progress", (event) => {
           if (event.lengthComputable) {
-            // Progress from 5% to 90% during upload
-            const percent = 5 + (event.loaded / event.total) * 85;
+            // Progress from 0% to 85% during upload to server
+            const percent = (event.loaded / event.total) * 85;
             setUploadState((prev) => ({
               ...prev,
               progress: Math.round(percent),
@@ -96,9 +67,21 @@ export function useUpload(): UseUploadReturn {
 
         xhr.addEventListener("load", () => {
           if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
+            try {
+              const response: UploadResponse = JSON.parse(xhr.responseText);
+              resolve(response.recordingId);
+            } catch {
+              reject(new Error("Некорректный ответ сервера"));
+            }
           } else {
-            reject(new Error(`Ошибка загрузки: ${xhr.status}`));
+            let message = `Ошибка загрузки: ${xhr.status}`;
+            try {
+              const err = JSON.parse(xhr.responseText);
+              if (err.error) message = err.error;
+            } catch {
+              // use default message
+            }
+            reject(new Error(message));
           }
         });
 
@@ -110,17 +93,21 @@ export function useUpload(): UseUploadReturn {
           reject(new Error("Загрузка отменена"));
         });
 
-        xhr.open("POST", uploadUrl);
-        xhr.setRequestHeader("Content-Type", contentType);
-        xhr.send(file);
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("title", title);
+
+        xhr.open("POST", "/api/upload");
+        xhr.send(formData);
       });
 
       setUploadState((prev) => ({
         ...prev,
-        progress: 95,
+        recordingId,
+        progress: 90,
       }));
 
-      // Step 3: Confirm upload completion
+      // Step 2: Confirm upload and trigger processing
       const completeResponse = await fetch(`/api/upload/${recordingId}/complete`, {
         method: "POST",
       });
