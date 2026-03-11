@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
-import { getSignedUploadUrl } from "@/lib/supabase/storage";
 import type { RecordingInsert } from "@/types/database";
+
+// Allow up to 5 minutes for large file uploads
+export const maxDuration = 300;
 
 // Development organization UUID for anonymous uploads
 const DEV_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000000";
@@ -35,31 +37,26 @@ function normalizeContentType(contentType: string): string {
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
-interface UploadRequest {
-  fileName: string;
-  fileSize: number;
-  contentType: string;
-  title: string;
-}
-
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-
-    // Check authentication (optional for now, can be enforced later)
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Parse request body
-    const body: UploadRequest = await request.json();
-    const { fileName, fileSize, contentType, title } = body;
+    // Parse FormData
+    const formData = await request.formData();
+    const file = formData.get("file") as File | null;
+    const title = formData.get("title") as string | null;
 
-    // Validate required fields
-    if (!fileName || !fileSize || !contentType) {
+    if (!file) {
       return NextResponse.json(
-        { error: "Missing required fields: fileName, fileSize, contentType" },
+        { error: "Missing file in form data" },
         { status: 400 }
       );
     }
+
+    const fileName = file.name;
+    const fileSize = file.size;
+    const contentType = file.type;
 
     // Validate content type
     if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
@@ -77,12 +74,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique file path for Supabase Storage (ASCII-only to avoid encoding issues)
+    // Generate unique file path (ASCII-only)
     const recordingId = randomUUID();
     const fileExt = fileName.includes(".") ? fileName.split(".").pop() : "bin";
     const storagePath = `${DEV_ORGANIZATION_ID}/${recordingId}/audio.${fileExt}`;
 
-    // Use admin client for database operations to bypass RLS
     const adminClient = createAdminClient();
 
     // Create recording in database with 'uploading' status
@@ -107,19 +103,30 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate signed URL for direct upload to Supabase Storage
-    const uploadUrl = await getSignedUploadUrl(storagePath);
-
-    // Return normalized content type so client sends a type the bucket accepts
+    // Upload file to Supabase Storage server-side (bypasses CORS)
     const storageContentType = normalizeContentType(contentType);
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-    return NextResponse.json({
-      recordingId,
-      uploadUrl,
-      contentType: storageContentType,
-    });
+    const { error: uploadError } = await adminClient.storage
+      .from("audio-files")
+      .upload(storagePath, buffer, {
+        contentType: storageContentType,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      console.error("Storage upload error:", uploadError);
+      // Clean up the DB record on upload failure
+      await adminClient.from("recordings").delete().eq("id", recordingId);
+      return NextResponse.json(
+        { error: `Storage upload failed: ${uploadError.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ recordingId });
   } catch (error) {
-    console.error("Upload init error:", error);
+    console.error("Upload error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
