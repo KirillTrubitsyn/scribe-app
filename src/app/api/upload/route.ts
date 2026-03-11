@@ -77,9 +77,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate unique file path for Supabase Storage
+    // Generate unique file path for Supabase Storage (ASCII-only to avoid encoding issues)
     const recordingId = randomUUID();
-    const storagePath = `${DEV_ORGANIZATION_ID}/${recordingId}/${fileName}`;
+    const fileExt = fileName.includes(".") ? fileName.split(".").pop() : "bin";
+    const storagePath = `${DEV_ORGANIZATION_ID}/${recordingId}/audio.${fileExt}`;
 
     // Use admin client for database operations to bypass RLS
     const adminClient = createAdminClient();

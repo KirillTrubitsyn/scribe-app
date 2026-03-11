@@ -98,7 +98,9 @@ export function useUpload(): UseUploadReturn {
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve();
           } else {
-            reject(new Error(`Ошибка загрузки: ${xhr.status}`));
+            // Include response body for debugging
+            const detail = xhr.responseText ? `: ${xhr.responseText.slice(0, 200)}` : "";
+            reject(new Error(`Ошибка загрузки: ${xhr.status}${detail}`));
           }
         });
 
@@ -110,7 +112,7 @@ export function useUpload(): UseUploadReturn {
           reject(new Error("Загрузка отменена"));
         });
 
-        xhr.open("POST", uploadUrl);
+        xhr.open("PUT", uploadUrl);
         xhr.setRequestHeader("Content-Type", contentType);
         xhr.send(file);
       });
