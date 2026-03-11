@@ -13,6 +13,7 @@ interface ProcessingStatusProps {
 }
 
 const STATUS_LABELS: Record<RecordingStatus, { label: string; description: string }> = {
+  recording: { label: "Идёт запись", description: "Аудио записывается и транскрибируется в реальном времени" },
   uploading: { label: "Загрузка файла", description: "Файл загружается на сервер" },
   uploaded: { label: "Файл загружен", description: "Подготовка к обработке" },
   processing: { label: "Обработка аудио", description: "Подготовка аудио для транскрибации" },

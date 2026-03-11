@@ -4,11 +4,16 @@ import { useState, useCallback, useRef, useEffect } from "react";
 
 export type RecordingState = "idle" | "requesting" | "recording" | "paused" | "stopped" | "error";
 
+interface UseRecordingOptions {
+  onChunk?: (chunk: Blob) => void;
+}
+
 interface UseRecordingReturn {
   state: RecordingState;
   error: string | null;
   duration: number;
   audioBlob: Blob | null;
+  stream: MediaStream | null;
   start: () => Promise<void>;
   pause: () => void;
   resume: () => void;
@@ -16,11 +21,12 @@ interface UseRecordingReturn {
   reset: () => void;
 }
 
-export function useRecording(): UseRecordingReturn {
+export function useRecording(options?: UseRecordingOptions): UseRecordingReturn {
   const [state, setState] = useState<RecordingState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -28,6 +34,12 @@ export function useRecording(): UseRecordingReturn {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
   const pausedDurationRef = useRef<number>(0);
+  const onChunkRef = useRef(options?.onChunk);
+
+  // Keep onChunk ref up to date
+  useEffect(() => {
+    onChunkRef.current = options?.onChunk;
+  }, [options?.onChunk]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -66,7 +78,7 @@ export function useRecording(): UseRecordingReturn {
       setDuration(0);
 
       // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
           sampleRate: 48000,
@@ -75,7 +87,8 @@ export function useRecording(): UseRecordingReturn {
         },
       });
 
-      streamRef.current = stream;
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
 
       // Determine the best supported MIME type
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -86,7 +99,7 @@ export function useRecording(): UseRecordingReturn {
         ? "audio/mp4"
         : "audio/wav";
 
-      const mediaRecorder = new MediaRecorder(stream, {
+      const mediaRecorder = new MediaRecorder(mediaStream, {
         mimeType,
         audioBitsPerSecond: 128000,
       });
@@ -94,6 +107,8 @@ export function useRecording(): UseRecordingReturn {
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
+          // Notify listener of new chunk
+          onChunkRef.current?.(event.data);
         }
       };
 
@@ -106,6 +121,7 @@ export function useRecording(): UseRecordingReturn {
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((track) => track.stop());
           streamRef.current = null;
+          setStream(null);
         }
       };
 
@@ -177,6 +193,7 @@ export function useRecording(): UseRecordingReturn {
     pausedDurationRef.current = 0;
     setDuration(0);
     setAudioBlob(null);
+    setStream(null);
     setError(null);
     setState("idle");
   }, [stopTimer]);
@@ -186,6 +203,7 @@ export function useRecording(): UseRecordingReturn {
     error,
     duration,
     audioBlob,
+    stream,
     start,
     pause,
     resume,

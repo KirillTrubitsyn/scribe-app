@@ -3,8 +3,8 @@ import { randomUUID } from "crypto";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import type { RecordingInsert } from "@/types/database";
 
-// Allow up to 5 minutes for large file uploads
-export const maxDuration = 300;
+// Allow up to 10 minutes for large file uploads
+export const maxDuration = 600;
 
 // Development organization UUID for anonymous uploads
 const DEV_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000000";
