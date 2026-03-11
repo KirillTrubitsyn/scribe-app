@@ -11,7 +11,7 @@ VALUES (
   'audio-files',
   false,
   524288000, -- 500MB
-  ARRAY['audio/mpeg', 'audio/wav', 'audio/webm', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/x-m4a', 'audio/aac', 'video/webm']
+  ARRAY['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/webm', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'video/webm']
 );
 
 -- 2. RLS policies for storage.objects — allow all operations for MVP (no auth)

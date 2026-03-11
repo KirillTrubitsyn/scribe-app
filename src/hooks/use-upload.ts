@@ -14,6 +14,7 @@ interface UploadProgress {
 interface InitUploadResponse {
   recordingId: string;
   uploadUrl: string;
+  contentType: string;
 }
 
 interface UseUploadReturn {
@@ -70,7 +71,7 @@ export function useUpload(): UseUploadReturn {
         throw new Error(error.error || "Не удалось инициализировать загрузку");
       }
 
-      const { recordingId, uploadUrl }: InitUploadResponse = await initResponse.json();
+      const { recordingId, uploadUrl, contentType }: InitUploadResponse = await initResponse.json();
 
       setUploadState((prev) => ({
         ...prev,
@@ -110,7 +111,7 @@ export function useUpload(): UseUploadReturn {
         });
 
         xhr.open("PUT", uploadUrl);
-        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.setRequestHeader("Content-Type", contentType);
         xhr.send(file);
       });
 
