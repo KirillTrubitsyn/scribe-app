@@ -13,9 +13,25 @@ const ALLOWED_CONTENT_TYPES = [
   "audio/x-wav",
   "audio/mp4",
   "audio/x-m4a",
+  "audio/m4a",
   "audio/webm",
   "audio/ogg",
+  "audio/flac",
+  "audio/aac",
+  "video/webm",
 ];
+
+// Normalize browser MIME types to types accepted by Supabase Storage bucket
+const CONTENT_TYPE_MAP: Record<string, string> = {
+  "audio/x-wav": "audio/wav",
+  "audio/x-m4a": "audio/mp4",
+  "audio/m4a": "audio/mp4",
+  "video/webm": "audio/webm",
+};
+
+function normalizeContentType(contentType: string): string {
+  return CONTENT_TYPE_MAP[contentType] || contentType;
+}
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
@@ -93,9 +109,13 @@ export async function POST(request: Request) {
     // Generate signed URL for direct upload to Supabase Storage
     const uploadUrl = await getSignedUploadUrl(storagePath);
 
+    // Return normalized content type so client sends a type the bucket accepts
+    const storageContentType = normalizeContentType(contentType);
+
     return NextResponse.json({
       recordingId,
       uploadUrl,
+      contentType: storageContentType,
     });
   } catch (error) {
     console.error("Upload init error:", error);
