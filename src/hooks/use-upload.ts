@@ -110,7 +110,7 @@ export function useUpload(): UseUploadReturn {
           reject(new Error("Загрузка отменена"));
         });
 
-        xhr.open("PUT", uploadUrl);
+        xhr.open("POST", uploadUrl);
         xhr.setRequestHeader("Content-Type", contentType);
         xhr.send(file);
       });
