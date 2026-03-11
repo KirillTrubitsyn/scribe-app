@@ -5,6 +5,7 @@
 export type OrganizationRole = 'owner' | 'admin' | 'member'
 
 export type RecordingStatus =
+  | 'recording'
   | 'uploading'
   | 'uploaded'
   | 'processing'

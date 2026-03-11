@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { X, Mic, Square, Pause, Play, CheckCircle, AlertCircle } from "lucide-react";
+import { X, Mic, Square, Pause, Play, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import { useRecording } from "@/hooks/use-recording";
-import { useUpload } from "@/hooks/use-upload";
+import { useRealtimeTranscription } from "@/hooks/use-realtime-transcription";
+import { useChunkedUpload } from "@/hooks/use-chunked-upload";
 
 interface RecordingModalProps {
   isOpen: boolean;
@@ -21,40 +22,46 @@ function formatDuration(seconds: number): string {
 export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   const router = useRouter();
   const [title, setTitle] = useState("");
-  const [showTitleInput, setShowTitleInput] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
 
   const {
     state: recordingState,
     error: recordingError,
     duration,
-    audioBlob,
+    stream,
     start,
     pause,
     resume,
     stop,
     reset: resetRecording,
-  } = useRecording();
+  } = useRecording({
+    onChunk: (chunk) => {
+      chunkedUpload.addChunk(chunk);
+    },
+  });
 
-  const {
-    state: uploadState,
-    progress: uploadProgress,
-    error: uploadError,
-    recordingId,
-    upload,
-    reset: resetUpload,
-  } = useUpload();
+  const transcription = useRealtimeTranscription();
+  const chunkedUpload = useChunkedUpload();
+
+  // Derived state
+  const isRecording = recordingState === "recording";
+  const isPaused = recordingState === "paused";
+  const isStopped = recordingState === "stopped";
+  const isRequesting = recordingState === "requesting";
+  const hasError = recordingState === "error" || !!transcription.error || !!chunkedUpload.error;
+  const errorMessage = recordingError || transcription.error || chunkedUpload.error;
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!isOpen) {
       resetRecording();
-      resetUpload();
+      transcription.reset();
+      chunkedUpload.reset();
       setTitle("");
-      setShowTitleInput(false);
-      setIsSubmitting(false);
+      setIsSaving(false);
     }
-  }, [isOpen, resetRecording, resetUpload]);
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-start recording when modal opens
   useEffect(() => {
@@ -63,55 +70,87 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
     }
   }, [isOpen, recordingState, start]);
 
-  // Show title input when recording is stopped
+  // When stream is available, connect realtime transcription and init chunked upload
   useEffect(() => {
-    if (recordingState === "stopped" && audioBlob) {
-      setShowTitleInput(true);
+    if (stream && !transcription.isConnected && !transcription.error) {
+      transcription.connect(stream);
+      chunkedUpload.init();
     }
-  }, [recordingState, audioBlob]);
+  }, [stream]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-scroll transcript to bottom
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [transcription.fullText]);
+
+  // Disconnect transcription when recording stops
+  useEffect(() => {
+    if (isStopped && transcription.isConnected) {
+      transcription.disconnect();
+    }
+  }, [isStopped]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClose = useCallback(() => {
-    if (uploadState !== "uploading") {
+    if (!isSaving) {
       onClose();
     }
-  }, [uploadState, onClose]);
+  }, [isSaving, onClose]);
 
-  const handleUpload = async () => {
-    if (!audioBlob || isSubmitting) return;
+  const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
 
-    setIsSubmitting(true);
+    try {
+      // Update the recording title if user provided one
+      const recordingTitle = title.trim() || `Запись ${new Date().toLocaleDateString("ru-RU")}`;
 
-    // Create a File from the Blob
-    // Normalize content type - API expects base type without codecs
-    const contentType = audioBlob.type.split(";")[0] || "audio/webm";
-    const extension = contentType === "audio/mp4" ? "m4a" : "webm";
-    const fileName = `recording-${Date.now()}.${extension}`;
-    const file = new File([audioBlob], fileName, { type: contentType });
+      // Update title in DB
+      if (chunkedUpload.recordingId) {
+        await fetch(`/api/recordings/${chunkedUpload.recordingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: recordingTitle }),
+        });
+      }
 
-    const recordingTitle = title.trim() || `Запись ${new Date().toLocaleDateString("ru-RU")}`;
-    const result = await upload(file, recordingTitle);
+      // Finalize the chunked upload (uploads remaining chunks + triggers batch processing)
+      const success = await chunkedUpload.finalize();
 
-    if (result) {
-      setTimeout(() => {
-        router.push(`/recordings/${result}`);
-        onClose();
-      }, 1500);
-    } else {
-      setIsSubmitting(false);
+      if (success && chunkedUpload.recordingId) {
+        // Save the realtime transcript as a preliminary version
+        await fetch(`/api/recordings/${chunkedUpload.recordingId}/transcript/realtime`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: transcription.fullText,
+            segments: transcription.committedSegments,
+          }),
+        }).catch(() => {
+          // Non-critical — batch transcript will replace this
+        });
+
+        setTimeout(() => {
+          router.push(`/recordings/${chunkedUpload.recordingId}`);
+          onClose();
+        }, 1000);
+      } else {
+        setIsSaving(false);
+      }
+    } catch {
+      setIsSaving(false);
     }
   };
 
-  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTitle(e.target.value);
+  const handleRetry = () => {
+    resetRecording();
+    transcription.reset();
+    chunkedUpload.reset();
+    setTitle("");
+    setIsSaving(false);
+    start();
   };
 
   if (!isOpen) return null;
-
-  const isRecording = recordingState === "recording";
-  const isPaused = recordingState === "paused";
-  const isStopped = recordingState === "stopped";
-  const isRequesting = recordingState === "requesting";
-  const hasError = recordingState === "error";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -122,13 +161,21 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-lg mx-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl">
+      <div className="relative w-full max-w-2xl mx-4 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-800">
-          <h2 className="text-xl font-semibold text-white">Запись аудио</h2>
+        <div className="flex items-center justify-between p-6 border-b border-slate-800 shrink-0">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-semibold text-white">Запись аудио</h2>
+            {transcription.isConnected && (
+              <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Транскрибация
+              </span>
+            )}
+          </div>
           <button
             onClick={handleClose}
-            disabled={uploadState === "uploading"}
+            disabled={isSaving}
             className="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition-colors disabled:opacity-50"
           >
             <X className="w-5 h-5" />
@@ -136,37 +183,16 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6">
+        <div className="p-6 flex flex-col min-h-0 flex-1">
           {/* Success State */}
-          {uploadState === "success" ? (
+          {isSaving && chunkedUpload.isFinalized ? (
             <div className="text-center py-8">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
                 <CheckCircle className="w-8 h-8 text-emerald-400" />
               </div>
               <h3 className="text-white font-medium text-lg mb-2">Запись сохранена!</h3>
               <p className="text-slate-400">Перенаправляем на страницу записи...</p>
-            </div>
-          ) : uploadState === "uploading" ? (
-            /* Uploading State */
-            <div className="py-8">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center">
-                  <Mic className="w-6 h-6 text-orange-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white font-medium truncate">{title || "Новая запись"}</p>
-                  <p className="text-slate-400 text-sm">Сохранение...</p>
-                </div>
-              </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-200"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <p className="text-center text-slate-400 text-sm mt-3">
-                {Math.round(uploadProgress)}%
-              </p>
+              <p className="text-slate-500 text-sm mt-2">Диаризация спикеров будет выполнена в фоне</p>
             </div>
           ) : hasError ? (
             /* Error State */
@@ -175,22 +201,29 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                 <AlertCircle className="w-8 h-8 text-red-400" />
               </div>
               <h3 className="text-white font-medium text-lg mb-2">Ошибка</h3>
-              <p className="text-slate-400 mb-6">{recordingError || uploadError}</p>
+              <p className="text-slate-400 mb-6">{errorMessage}</p>
               <button
-                onClick={() => {
-                  resetRecording();
-                  start();
-                }}
+                onClick={handleRetry}
                 className="px-6 py-3 rounded-xl font-medium bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all"
               >
                 Попробовать снова
               </button>
             </div>
-          ) : showTitleInput && audioBlob ? (
-            /* Title Input State */
-            <div className="py-4">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center">
+          ) : isStopped ? (
+            /* Stopped — show transcript + title input */
+            <div className="flex flex-col min-h-0">
+              {/* Final transcript preview */}
+              {transcription.fullText && (
+                <div className="mb-4 max-h-48 overflow-y-auto rounded-lg bg-slate-800/50 border border-slate-700 p-4">
+                  <p className="text-xs text-slate-500 mb-2 uppercase tracking-wide">Предварительный транскрипт</p>
+                  <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {transcription.fullText}
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
                   <Mic className="w-6 h-6 text-orange-400" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -199,7 +232,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                 </div>
               </div>
 
-              <div className="mb-6">
+              <div className="mb-4">
                 <label htmlFor="recording-title" className="block text-sm font-medium text-slate-300 mb-2">
                   Название записи
                 </label>
@@ -207,117 +240,153 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                   id="recording-title"
                   type="text"
                   value={title}
-                  onChange={handleTitleChange}
+                  onChange={(e) => setTitle(e.target.value)}
                   placeholder="Введите название..."
                   className="w-full px-4 py-3 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 transition-colors"
                   autoFocus
                 />
               </div>
 
+              {isSaving && !chunkedUpload.isFinalized && (
+                <div className="mb-4 flex items-center gap-2 text-sm text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Сохранение оставшихся данных...</span>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button
-                  onClick={() => {
-                    resetRecording();
-                    setShowTitleInput(false);
-                    start();
-                  }}
-                  disabled={isSubmitting}
+                  onClick={handleRetry}
+                  disabled={isSaving}
                   className="flex-1 py-3 rounded-xl font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Перезаписать
                 </button>
                 <button
-                  onClick={handleUpload}
-                  disabled={isSubmitting}
+                  onClick={handleSave}
+                  disabled={isSaving}
                   className="flex-1 py-3 rounded-xl font-medium transition-all bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isSubmitting ? "Сохранение..." : "Сохранить"}
+                  {isSaving ? "Сохранение..." : "Сохранить"}
                 </button>
               </div>
             </div>
           ) : (
-            /* Recording State */
-            <div className="py-8">
-              {/* Microphone Visualization */}
-              <div className="flex justify-center mb-8">
-                <div
-                  className={cn(
-                    "w-24 h-24 rounded-full flex items-center justify-center transition-all",
-                    isRecording
-                      ? "bg-red-500/20 animate-pulse"
-                      : isPaused
-                      ? "bg-amber-500/20"
-                      : isRequesting
-                      ? "bg-slate-800"
-                      : "bg-slate-800"
-                  )}
-                >
-                  <Mic
-                    className={cn(
-                      "w-10 h-10 transition-colors",
-                      isRecording
-                        ? "text-red-400"
-                        : isPaused
-                        ? "text-amber-400"
-                        : "text-slate-400"
+            /* Recording State — with realtime transcript */
+            <div className="flex flex-col min-h-0">
+              {/* Recording controls header */}
+              <div className="shrink-0">
+                <div className="flex items-center justify-between mb-4">
+                  {/* Mic indicator + timer */}
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "w-12 h-12 rounded-full flex items-center justify-center transition-all",
+                        isRecording
+                          ? "bg-red-500/20 animate-pulse"
+                          : isPaused
+                          ? "bg-amber-500/20"
+                          : "bg-slate-800"
+                      )}
+                    >
+                      <Mic
+                        className={cn(
+                          "w-6 h-6 transition-colors",
+                          isRecording
+                            ? "text-red-400"
+                            : isPaused
+                            ? "text-amber-400"
+                            : "text-slate-400"
+                        )}
+                      />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-mono text-white">{formatDuration(duration)}</p>
+                      <p className="text-slate-400 text-xs">
+                        {isRequesting
+                          ? "Запрос доступа к микрофону..."
+                          : isRecording
+                          ? "Идет запись..."
+                          : isPaused
+                          ? "Запись на паузе"
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Controls */}
+                  <div className="flex gap-2">
+                    {isRecording && (
+                      <>
+                        <button
+                          onClick={pause}
+                          className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
+                          title="Пауза"
+                        >
+                          <Pause className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={stop}
+                          className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors"
+                          title="Остановить"
+                        >
+                          <Square className="w-5 h-5" />
+                        </button>
+                      </>
                     )}
-                  />
+                    {isPaused && (
+                      <>
+                        <button
+                          onClick={resume}
+                          className="w-10 h-10 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
+                          title="Продолжить"
+                        >
+                          <Play className="w-5 h-5" />
+                        </button>
+                        <button
+                          onClick={stop}
+                          className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors"
+                          title="Остановить"
+                        >
+                          <Square className="w-5 h-5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* Duration */}
-              <div className="text-center mb-8">
-                <p className="text-4xl font-mono text-white">{formatDuration(duration)}</p>
-                <p className="text-slate-400 text-sm mt-2">
-                  {isRequesting
-                    ? "Запрос доступа к микрофону..."
-                    : isRecording
-                    ? "Идет запись..."
-                    : isPaused
-                    ? "Запись на паузе"
-                    : ""}
-                </p>
+              {/* Realtime transcript area */}
+              <div className="flex-1 min-h-[200px] max-h-[400px] overflow-y-auto rounded-lg bg-slate-800/50 border border-slate-700 p-4">
+                {transcription.fullText ? (
+                  <div className="text-sm text-slate-300 leading-relaxed">
+                    {/* Committed segments */}
+                    {transcription.committedSegments.map((segment, i) => (
+                      <span key={i}>{segment.text} </span>
+                    ))}
+                    {/* Partial text (still being recognized) */}
+                    {transcription.partialText && (
+                      <span className="text-slate-500 italic">{transcription.partialText}</span>
+                    )}
+                    <div ref={transcriptEndRef} />
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                    {transcription.isConnected
+                      ? "Начните говорить — текст появится здесь..."
+                      : isRequesting
+                      ? "Подключение к микрофону..."
+                      : "Подключение к сервису транскрибации..."}
+                  </div>
+                )}
               </div>
 
-              {/* Controls */}
-              <div className="flex justify-center gap-4">
-                {isRecording && (
-                  <>
-                    <button
-                      onClick={pause}
-                      className="w-14 h-14 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
-                      title="Пауза"
-                    >
-                      <Pause className="w-6 h-6" />
-                    </button>
-                    <button
-                      onClick={stop}
-                      className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors"
-                      title="Остановить"
-                    >
-                      <Square className="w-6 h-6" />
-                    </button>
-                  </>
-                )}
-                {isPaused && (
-                  <>
-                    <button
-                      onClick={resume}
-                      className="w-14 h-14 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-white transition-colors"
-                      title="Продолжить"
-                    >
-                      <Play className="w-6 h-6" />
-                    </button>
-                    <button
-                      onClick={stop}
-                      className="w-14 h-14 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center text-white transition-colors"
-                      title="Остановить"
-                    >
-                      <Square className="w-6 h-6" />
-                    </button>
-                  </>
-                )}
-              </div>
+              {/* Upload status */}
+              {chunkedUpload.uploadedChunks > 0 && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Загружено: {chunkedUpload.uploadedChunks} фрагментов ({(chunkedUpload.totalSize / 1024 / 1024).toFixed(1)} МБ)
+                </p>
+              )}
             </div>
           )}
         </div>
