@@ -13,6 +13,10 @@ type StatusConfig = {
 };
 
 const statusMap: Record<RecordingStatus, StatusConfig> = {
+  recording: {
+    label: "Запись",
+    className: "bg-red-500/20 text-red-400 border-red-500/30",
+  },
   ready: {
     label: "Готово",
     className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
