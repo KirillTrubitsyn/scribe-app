@@ -14,7 +14,7 @@ interface UseChunkedUploadReturn {
   reset: () => void;
 }
 
-const UPLOAD_INTERVAL_MS = 300_000; // Upload every 5 minutes (short recordings go as single chunk)
+const UPLOAD_INTERVAL_MS = 30_000; // Upload every 30 seconds to avoid large single uploads on finalize
 
 export function useChunkedUpload(): UseChunkedUploadReturn {
   const [recordingId, setRecordingId] = useState<string | null>(null);
@@ -68,28 +68,67 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
         formData.append("finalize", "true");
       }
 
-      const response = await fetch("/api/upload/chunk", {
-        method: "POST",
-        body: formData,
-      });
+      // Retry with exponential backoff (handles iOS Safari "Load failed" errors)
+      const maxRetries = 3;
+      let lastError: Error | null = null;
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || `Upload failed: ${response.status}`);
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          if (attempt > 0) {
+            const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+            console.warn(`[ChunkedUpload] Retry attempt ${attempt}/${maxRetries} after ${delay}ms`);
+            await new Promise((r) => setTimeout(r, delay));
+          }
+
+          const response = await fetch("/api/upload/chunk", {
+            method: "POST",
+            body: attempt > 0
+              ? (() => {
+                  // Recreate FormData on retry to avoid iOS Safari stale body issues
+                  const fd = new FormData();
+                  fd.append("audio", blob, `chunk-${chunkIndexRef.current}.webm`);
+                  fd.append("recordingId", recordingIdRef.current!);
+                  fd.append("chunkIndex", String(chunkIndexRef.current));
+                  if (finalize) fd.append("finalize", "true");
+                  return fd;
+                })()
+              : formData,
+          });
+
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || `Upload failed: ${response.status}`);
+          }
+
+          const result = await response.json();
+          setUploadedChunks((prev) => prev + 1);
+          setTotalSize((prev) => prev + (result.size || blob.size));
+          chunkIndexRef.current++;
+
+          if (finalize) {
+            setIsFinalized(true);
+          }
+
+          lastError = null;
+          break;
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error("Ошибка загрузки");
+          if (attempt === maxRetries) break;
+        }
       }
 
-      const result = await response.json();
-      setUploadedChunks((prev) => prev + 1);
-      setTotalSize((prev) => prev + (result.size || blob.size));
-      chunkIndexRef.current++;
-
-      if (finalize) {
-        setIsFinalized(true);
+      if (lastError) {
+        throw lastError;
       }
     } catch (err) {
+      // Put chunks back so they can be retried on next attempt
       const message = err instanceof Error ? err.message : "Ошибка загрузки чанка";
-      errorRef.current = message;
-      setError(message);
+      // Provide a user-friendly message for browser-level fetch errors
+      const userMessage = message === "Load failed" || message === "Failed to fetch"
+        ? "Ошибка сети при загрузке аудио. Проверьте подключение к интернету."
+        : message;
+      errorRef.current = userMessage;
+      setError(userMessage);
       console.error("[ChunkedUpload] Error:", err);
     } finally {
       uploadingRef.current = false;
