@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { X, Mic, Square, Pause, Play, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { X, Mic, Square, Pause, Play, CheckCircle, AlertCircle, Loader2, AlertTriangle } from "lucide-react";
 import { useRecording } from "@/hooks/use-recording";
 import { useRealtimeTranscription } from "@/hooks/use-realtime-transcription";
 import { useChunkedUpload } from "@/hooks/use-chunked-upload";
@@ -30,6 +30,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
     error: recordingError,
     duration,
     stream,
+    wasInterrupted,
     start,
     pause,
     resume,
@@ -399,6 +400,19 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
                   </div>
                 )}
               </div>
+
+              {/* Interruption warning */}
+              {wasInterrupted && (
+                <div className="mt-3 flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                  <div className="text-xs text-amber-300">
+                    <p className="font-medium">Запись была прервана</p>
+                    <p className="text-amber-400/70 mt-0.5">
+                      Экран устройства выключился и браузер приостановил запись. Рекомендуем остановить и сохранить текущую запись, затем начать новую.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Upload status */}
               {chunkedUpload.uploadedChunks > 0 && (

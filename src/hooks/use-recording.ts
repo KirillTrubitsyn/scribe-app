@@ -14,6 +14,7 @@ interface UseRecordingReturn {
   duration: number;
   audioBlob: Blob | null;
   stream: MediaStream | null;
+  wasInterrupted: boolean;
   start: () => Promise<void>;
   pause: () => void;
   resume: () => void;
@@ -27,6 +28,7 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
   const [duration, setDuration] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [wasInterrupted, setWasInterrupted] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -35,11 +37,74 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
   const startTimeRef = useRef<number>(0);
   const pausedDurationRef = useRef<number>(0);
   const onChunkRef = useRef(options?.onChunk);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  const lastChunkTimeRef = useRef<number>(0);
+  const stateRef = useRef<RecordingState>("idle");
 
-  // Keep onChunk ref up to date
+  // Keep refs up to date
   useEffect(() => {
     onChunkRef.current = options?.onChunk;
   }, [options?.onChunk]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  // Wake Lock: request and release helpers
+  const requestWakeLock = useCallback(async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+        wakeLockRef.current.addEventListener("release", () => {
+          wakeLockRef.current = null;
+        });
+      }
+    } catch {
+      // Wake Lock not available or denied — non-critical
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  // Re-acquire wake lock when page becomes visible again (browsers release it on hide)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && stateRef.current === "recording") {
+        // Re-acquire wake lock
+        requestWakeLock();
+
+        // Check if MediaRecorder is still alive
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state === "inactive") {
+          // Browser killed the recorder while in background/sleep
+          setWasInterrupted(true);
+          console.warn("[Recording] MediaRecorder was stopped by the browser during sleep/background");
+        }
+
+        // Check for timer gap — if more than 3s passed since last expected tick,
+        // the browser was likely suspended
+        const now = Date.now();
+        if (lastChunkTimeRef.current > 0) {
+          const gap = now - lastChunkTimeRef.current;
+          if (gap > 5000) {
+            // More than 5 seconds since last chunk — likely suspended
+            console.warn(`[Recording] Detected ${Math.round(gap / 1000)}s gap — browser was likely suspended`);
+            setWasInterrupted(true);
+          }
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [requestWakeLock]);
 
   // Clean up on unmount
   useEffect(() => {
@@ -50,8 +115,9 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
+      releaseWakeLock();
     };
-  }, []);
+  }, [releaseWakeLock]);
 
   const startTimer = useCallback(() => {
     startTimeRef.current = Date.now() - pausedDurationRef.current * 1000;
@@ -73,8 +139,10 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
       setState("requesting");
       setError(null);
       setAudioBlob(null);
+      setWasInterrupted(false);
       chunksRef.current = [];
       pausedDurationRef.current = 0;
+      lastChunkTimeRef.current = 0;
       setDuration(0);
 
       // Request microphone access
@@ -89,6 +157,9 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
 
       streamRef.current = mediaStream;
       setStream(mediaStream);
+
+      // Request wake lock to prevent screen from sleeping
+      await requestWakeLock();
 
       // Determine the best supported MIME type
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -107,6 +178,7 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
+          lastChunkTimeRef.current = Date.now();
           // Notify listener of new chunk
           onChunkRef.current?.(event.data);
         }
@@ -116,6 +188,7 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
         const blob = new Blob(chunksRef.current, { type: mimeType });
         setAudioBlob(blob);
         setState("stopped");
+        releaseWakeLock();
 
         // Stop all tracks
         if (streamRef.current) {
@@ -129,10 +202,12 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
         setError("Ошибка при записи аудио");
         setState("error");
         stopTimer();
+        releaseWakeLock();
       };
 
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000); // Collect data every second
+      lastChunkTimeRef.current = Date.now();
       setState("recording");
       startTimer();
     } catch (err) {
@@ -150,8 +225,9 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
 
       setError(errorMessage);
       setState("error");
+      releaseWakeLock();
     }
-  }, [startTimer, stopTimer]);
+  }, [startTimer, stopTimer, requestWakeLock, releaseWakeLock]);
 
   const pause = useCallback(() => {
     if (mediaRecorderRef.current && state === "recording") {
@@ -172,13 +248,15 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
 
   const stop = useCallback(() => {
     stopTimer();
+    releaseWakeLock();
     if (mediaRecorderRef.current && (state === "recording" || state === "paused")) {
       mediaRecorderRef.current.stop();
     }
-  }, [state, stopTimer]);
+  }, [state, stopTimer, releaseWakeLock]);
 
   const reset = useCallback(() => {
     stopTimer();
+    releaseWakeLock();
     if (mediaRecorderRef.current) {
       if (mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
@@ -191,12 +269,14 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
     }
     chunksRef.current = [];
     pausedDurationRef.current = 0;
+    lastChunkTimeRef.current = 0;
     setDuration(0);
     setAudioBlob(null);
     setStream(null);
     setError(null);
+    setWasInterrupted(false);
     setState("idle");
-  }, [stopTimer]);
+  }, [stopTimer, releaseWakeLock]);
 
   return {
     state,
@@ -204,6 +284,7 @@ export function useRecording(options?: UseRecordingOptions): UseRecordingReturn 
     duration,
     audioBlob,
     stream,
+    wasInterrupted,
     start,
     pause,
     resume,
