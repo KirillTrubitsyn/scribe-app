@@ -80,7 +80,9 @@ export function useRealtimeTranscription(): UseRealtimeTranscriptionReturn {
       // 1. Get a single-use token from our server
       const tokenResponse = await fetch("/api/stt/token", { method: "POST" });
       if (!tokenResponse.ok) {
-        throw new Error("Не удалось получить токен для транскрибации");
+        console.warn("[RealtimeSTT] Token request failed:", tokenResponse.status);
+        setError("Не удалось подключить транскрибацию в реальном времени");
+        return;
       }
       const { token } = await tokenResponse.json();
 
