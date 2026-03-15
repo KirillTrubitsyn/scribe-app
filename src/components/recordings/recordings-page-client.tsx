@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { RecordingsTable, type RecordingWithRelations } from "./recordings-table";
 import { UploadModal } from "./upload-modal";
+import { SearchDialog } from "@/components/search/search-dialog";
 
 interface RecordingsPageClientProps {
   recordings: RecordingWithRelations[];
@@ -24,6 +25,7 @@ function formatTotalHours(seconds: number): string {
 
 export function RecordingsPageClient({ recordings }: RecordingsPageClientProps) {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const totalCount = recordings.length;
   const totalDuration = calculateTotalDuration(recordings);
@@ -40,13 +42,22 @@ export function RecordingsPageClient({ recordings }: RecordingsPageClientProps) 
             </p>
           </div>
 
-          <button
-            onClick={() => setIsUploadModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 transition-all hover:scale-[1.02]"
-          >
-            <Plus className="w-5 h-5" />
-            Загрузить
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 transition-all"
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden sm:inline">Поиск</span>
+            </button>
+            <button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white font-medium shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 transition-all hover:scale-[1.02]"
+            >
+              <Plus className="w-5 h-5" />
+              Загрузить
+            </button>
+          </div>
         </div>
 
         {/* Table */}
@@ -56,6 +67,11 @@ export function RecordingsPageClient({ recordings }: RecordingsPageClientProps) 
       <UploadModal
         isOpen={isUploadModalOpen}
         onClose={() => setIsUploadModalOpen(false)}
+      />
+
+      <SearchDialog
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
       />
     </>
   );

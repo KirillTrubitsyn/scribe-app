@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { GoogleGenAI, type Content } from "@google/genai";
+import { generateQueryEmbedding } from "@/lib/embeddings";
 import type { Transcript } from "@/types/database";
 
 // ============================================
@@ -140,18 +141,49 @@ export async function POST(
   const transcript = transcriptData as Transcript;
 
   try {
-    // 5. Prepare context and chat
+    // 5. Try RAG: find relevant chunks via embeddings
     const genAI = getGeminiClient();
-    const transcriptContext = prepareTranscriptContext(transcript);
+    let transcriptContext: string;
+    let ragUsed = false;
+
+    try {
+      const queryEmbedding = await generateQueryEmbedding(message.trim());
+      const { data: relevantChunks } = await adminClient.rpc("match_chunks", {
+        query_embedding: `[${queryEmbedding.join(",")}]`,
+        match_threshold: 0.35,
+        match_count: 8,
+        filter_recording_id: recordingId,
+      });
+
+      if (relevantChunks && relevantChunks.length > 0) {
+        // Use RAG: only pass relevant chunks as context
+        transcriptContext = relevantChunks
+          .map((chunk: { start_time: number | null; speaker: string | null; text: string; similarity: number }) => {
+            const timeStr = chunk.start_time != null
+              ? `[${Math.floor(chunk.start_time / 60).toString().padStart(2, "0")}:${Math.floor(chunk.start_time % 60).toString().padStart(2, "0")}]`
+              : "";
+            const speakerStr = chunk.speaker && chunk.speaker !== "multiple" ? `${chunk.speaker}: ` : "";
+            return `${timeStr} ${speakerStr}${chunk.text}`;
+          })
+          .join("\n\n");
+        ragUsed = true;
+      } else {
+        // No relevant chunks found — fallback to full transcript
+        transcriptContext = prepareTranscriptContext(transcript);
+      }
+    } catch {
+      // Embeddings not available — fallback to full transcript
+      transcriptContext = prepareTranscriptContext(transcript);
+    }
 
     // Build conversation context
     const contextPrompt = `${SYSTEM_PROMPT}
 
-=== ТРАНСКРИПТ ЗАПИСИ: "${accessCheck.title}" ===
+=== ${ragUsed ? "РЕЛЕВАНТНЫЕ ФРАГМЕНТЫ" : "ТРАНСКРИПТ"} ЗАПИСИ: "${accessCheck.title}" ===
 
 ${transcriptContext}
 
-=== КОНЕЦ ТРАНСКРИПТА ===
+=== КОНЕЦ ${ragUsed ? "ФРАГМЕНТОВ" : "ТРАНСКРИПТА"} ===
 
 `;
 

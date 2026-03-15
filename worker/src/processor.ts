@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from 'uuid'
 import { transcribeAudio } from './transcription.js'
+import { generateAndStoreEmbeddings } from './embeddings.js'
 import {
   sendProcessingStarted,
   sendTranscriptionCompleted,
@@ -85,7 +86,7 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       throw new Error('Транскрипция не дала результатов. Аудио может быть пустым, слишком коротким или не содержать распознаваемой речи.')
     }
 
-    // 3. Send webhook: transcription_completed (this is the final step)
+    // 3. Send webhook: transcription_completed
     console.log('[Processor] Step 3: Sending transcription_completed webhook')
     await sendTranscriptionCompleted(
       recording_id,
@@ -95,6 +96,20 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       transcriptionResult.durationSeconds
     )
 
+    // 4. Generate embeddings for semantic search (non-blocking)
+    console.log('[Processor] Step 4: Generating embeddings for semantic search')
+    try {
+      const chunkCount = await generateAndStoreEmbeddings(
+        recording_id,
+        transcriptionResult.transcript.segments,
+        transcriptionResult.transcript.full_text
+      )
+      console.log(`[Processor] Generated embeddings for ${chunkCount} chunks`)
+    } catch (embeddingError) {
+      // Embeddings are non-critical — don't fail the whole pipeline
+      console.error('[Processor] Embedding generation failed (non-critical):', embeddingError)
+    }
+
     // Mark as completed (transcription done, user can now manually trigger analysis)
     activeJobs.set(recording_id, {
       ...activeJobs.get(recording_id)!,
@@ -102,7 +117,7 @@ export async function processRecording(request: ProcessingRequest): Promise<void
       completed_at: new Date().toISOString(),
     })
 
-    console.log(`[Processor] Transcription completed for recording ${recording_id}. User can now manually trigger AI analysis.`)
+    console.log(`[Processor] Processing completed for recording ${recording_id}.`)
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error)
 

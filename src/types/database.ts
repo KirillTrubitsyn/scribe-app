@@ -106,6 +106,18 @@ export type ProcessingJob = {
   created_at: string
 }
 
+export type TranscriptChunk = {
+  id: string
+  recording_id: string
+  chunk_index: number
+  text: string
+  start_time: number | null
+  end_time: number | null
+  speaker: string | null
+  embedding: number[] | null
+  created_at: string
+}
+
 // ============================================
 // Insert Types (for creating new records)
 // ============================================
