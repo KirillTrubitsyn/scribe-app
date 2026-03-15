@@ -28,9 +28,24 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   const recordingIdRef = useRef<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const uploadingRef = useRef(false);
+  const errorRef = useRef<string | null>(null);
 
   const uploadPendingChunks = useCallback(async (finalize = false) => {
-    if (uploadingRef.current) return;
+    // If another upload is in progress, wait for it to complete when finalizing
+    if (uploadingRef.current) {
+      if (finalize) {
+        await new Promise<void>((resolve) => {
+          const check = setInterval(() => {
+            if (!uploadingRef.current) {
+              clearInterval(check);
+              resolve();
+            }
+          }, 100);
+        });
+      } else {
+        return;
+      }
+    }
     if (pendingChunksRef.current.length === 0 && !finalize) return;
     if (!recordingIdRef.current) return;
 
@@ -73,6 +88,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Ошибка загрузки чанка";
+      errorRef.current = message;
       setError(message);
       console.error("[ChunkedUpload] Error:", err);
     } finally {
@@ -97,6 +113,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   const init = useCallback(async (title?: string, mimeType?: string): Promise<string | null> => {
     try {
       setError(null);
+      errorRef.current = null;
       setUploadedChunks(0);
       setTotalSize(0);
       setIsFinalized(false);
@@ -139,8 +156,8 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
     // Upload any remaining chunks with finalize flag
     await uploadPendingChunks(true);
 
-    return !error;
-  }, [stopPeriodicUpload, uploadPendingChunks, error]);
+    return !errorRef.current;
+  }, [stopPeriodicUpload, uploadPendingChunks]);
 
   const reset = useCallback(() => {
     stopPeriodicUpload();
@@ -152,6 +169,7 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
     setUploadedChunks(0);
     setTotalSize(0);
     setError(null);
+    errorRef.current = null;
     setIsFinalized(false);
   }, [stopPeriodicUpload]);
 
