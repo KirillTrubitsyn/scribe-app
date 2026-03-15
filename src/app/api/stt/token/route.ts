@@ -10,11 +10,11 @@ export async function POST() {
       );
     }
 
-    // Request a signed token from ElevenLabs for client-side WebSocket auth
+    // Request a single-use token from ElevenLabs for client-side WebSocket auth
     const response = await fetch(
-      "https://api.elevenlabs.io/v1/speech-to-text/get-websocket-token",
+      "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
       {
-        method: "GET",
+        method: "POST",
         headers: {
           "xi-api-key": apiKey,
         },
