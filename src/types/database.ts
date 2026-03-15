@@ -230,9 +230,34 @@ export type Database = {
         Update: ProcessingJobUpdate
         Relationships: []
       }
+      transcript_chunks: {
+        Row: TranscriptChunk
+        Insert: Omit<TranscriptChunk, 'id' | 'created_at'> & { id?: string; created_at?: string }
+        Update: Partial<Omit<TranscriptChunk, 'id' | 'created_at'>>
+        Relationships: []
+      }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      match_chunks: {
+        Args: {
+          query_embedding: string
+          match_threshold?: number
+          match_count?: number
+          filter_recording_id?: string | null
+        }
+        Returns: {
+          id: string
+          recording_id: string
+          chunk_index: number
+          text: string
+          start_time: number | null
+          end_time: number | null
+          speaker: string | null
+          similarity: number
+        }[]
+      }
+    }
     Enums: {
       organization_role: OrganizationRole
       recording_status: RecordingStatus
