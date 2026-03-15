@@ -76,7 +76,9 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   useEffect(() => {
     if (stream && !transcription.isConnected && !transcription.error) {
       transcription.connect(stream);
-      chunkedUpload.init();
+      chunkedUpload.init().catch((err) => {
+        console.error("[RecordingModal] Failed to init chunked upload:", err);
+      });
     }
   }, [stream]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -103,24 +105,32 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
     setIsSaving(true);
 
     try {
+      // If init hasn't completed yet (recordingId is null), try to init now
+      let currentRecordingId = chunkedUpload.recordingId;
+      if (!currentRecordingId) {
+        currentRecordingId = await chunkedUpload.init();
+        if (!currentRecordingId) {
+          setIsSaving(false);
+          return;
+        }
+      }
+
       // Update the recording title if user provided one
       const recordingTitle = title.trim() || `Запись ${new Date().toLocaleDateString("ru-RU")}`;
 
       // Update title in DB
-      if (chunkedUpload.recordingId) {
-        await fetch(`/api/recordings/${chunkedUpload.recordingId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: recordingTitle }),
-        });
-      }
+      await fetch(`/api/recordings/${currentRecordingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: recordingTitle }),
+      });
 
       // Finalize the chunked upload (uploads remaining chunks + triggers batch processing)
       const success = await chunkedUpload.finalize();
 
-      if (success && chunkedUpload.recordingId) {
+      if (success && currentRecordingId) {
         // Save the realtime transcript as a preliminary version
-        await fetch(`/api/recordings/${chunkedUpload.recordingId}/transcript/realtime`, {
+        await fetch(`/api/recordings/${currentRecordingId}/transcript/realtime`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -132,7 +142,7 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
         });
 
         setTimeout(() => {
-          router.push(`/recordings/${chunkedUpload.recordingId}`);
+          router.push(`/recordings/${currentRecordingId}`);
           onClose();
         }, 1000);
       } else {

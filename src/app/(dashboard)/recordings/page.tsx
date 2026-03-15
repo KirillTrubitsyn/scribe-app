@@ -15,7 +15,7 @@ async function getRecordings(): Promise<RecordingWithRelations[]> {
     return [];
   }
 
-  return (data as RecordingWithRelations[]) || [];
+  return (data as unknown as RecordingWithRelations[]) || [];
 }
 
 export default async function RecordingsPage() {
