@@ -14,7 +14,7 @@ interface UseChunkedUploadReturn {
   reset: () => void;
 }
 
-const UPLOAD_INTERVAL_MS = 30_000; // Upload every 30 seconds
+const UPLOAD_INTERVAL_MS = 300_000; // Upload every 5 minutes (short recordings go as single chunk)
 
 export function useChunkedUpload(): UseChunkedUploadReturn {
   const [recordingId, setRecordingId] = useState<string | null>(null);
@@ -153,8 +153,17 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
   const finalize = useCallback(async (): Promise<boolean> => {
     stopPeriodicUpload();
 
-    // Upload any remaining chunks with finalize flag
-    await uploadPendingChunks(true);
+    // Upload any remaining chunks with finalize flag, retry on network failure
+    const maxRetries = 3;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      errorRef.current = null;
+      await uploadPendingChunks(true);
+      if (!errorRef.current) break;
+      if (attempt < maxRetries - 1) {
+        console.warn(`[ChunkedUpload] Finalize attempt ${attempt + 1} failed, retrying...`);
+        await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
 
     return !errorRef.current;
   }, [stopPeriodicUpload, uploadPendingChunks]);
