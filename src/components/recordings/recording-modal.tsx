@@ -49,8 +49,10 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
   const isPaused = recordingState === "paused";
   const isStopped = recordingState === "stopped";
   const isRequesting = recordingState === "requesting";
-  const hasError = recordingState === "error" || !!transcription.error || !!chunkedUpload.error;
-  const errorMessage = recordingError || transcription.error || chunkedUpload.error;
+  // Transcription errors should not block recording — only recording/upload errors are fatal
+  const hasError = recordingState === "error" || !!chunkedUpload.error;
+  const errorMessage = recordingError || chunkedUpload.error;
+  const hasTranscriptionWarning = !!transcription.error && !hasError;
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -358,7 +360,14 @@ export function RecordingModal({ isOpen, onClose }: RecordingModalProps) {
 
               {/* Realtime transcript area */}
               <div className="flex-1 min-h-[200px] max-h-[400px] overflow-y-auto rounded-lg bg-slate-800/50 border border-slate-700 p-4">
-                {transcription.fullText ? (
+                {hasTranscriptionWarning ? (
+                  <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                    <div className="text-center">
+                      <p className="text-amber-400/70 mb-1">Транскрибация в реальном времени недоступна</p>
+                      <p>Запись продолжается, транскрипт будет создан после сохранения</p>
+                    </div>
+                  </div>
+                ) : transcription.fullText ? (
                   <div className="text-sm text-slate-300 leading-relaxed">
                     {/* Committed segments */}
                     {transcription.committedSegments.map((segment, i) => (
