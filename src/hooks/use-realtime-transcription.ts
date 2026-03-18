@@ -77,25 +77,17 @@ export function useRealtimeTranscription(): UseRealtimeTranscriptionReturn {
     try {
       setError(null);
 
-      // 1. Get a single-use token from our server
+      // 1. Get a signed WebSocket URL from our server (keeps API key server-side)
       const tokenResponse = await fetch("/api/stt/token", { method: "POST" });
       if (!tokenResponse.ok) {
         console.warn("[RealtimeSTT] Token request failed:", tokenResponse.status);
         setError("Не удалось подключить транскрибацию в реальном времени");
         return;
       }
-      const { token } = await tokenResponse.json();
+      const { signedUrl } = await tokenResponse.json();
 
-      // 2. Connect WebSocket to ElevenLabs
-      const wsUrl = new URL("wss://api.elevenlabs.io/v1/speech-to-text/realtime");
-      wsUrl.searchParams.set("model_id", "scribe_v2_realtime");
-      wsUrl.searchParams.set("language_code", "rus");
-      wsUrl.searchParams.set("token", token);
-      wsUrl.searchParams.set("commit_strategy", "vad");
-      wsUrl.searchParams.set("vad_silence_threshold_secs", "1.5");
-      wsUrl.searchParams.set("include_timestamps", "true");
-
-      const ws = new WebSocket(wsUrl.toString());
+      // 2. Connect WebSocket to ElevenLabs using the signed URL
+      const ws = new WebSocket(signedUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
