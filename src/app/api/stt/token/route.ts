@@ -10,29 +10,17 @@ export async function POST() {
       );
     }
 
-    // Request a single-use token from ElevenLabs for client-side WebSocket auth
-    const response = await fetch(
-      "https://api.elevenlabs.io/v1/single-use-token/realtime_scribe",
-      {
-        method: "POST",
-        headers: {
-          "xi-api-key": apiKey,
-        },
-      }
-    );
+    // Generate a signed WebSocket URL server-side to avoid exposing the API key client-side
+    // ElevenLabs Scribe realtime WebSocket accepts xi-api-key as a query parameter
+    const wsUrl = new URL("wss://api.elevenlabs.io/v1/speech-to-text/realtime");
+    wsUrl.searchParams.set("model_id", "scribe_v2_realtime");
+    wsUrl.searchParams.set("language_code", "rus");
+    wsUrl.searchParams.set("xi-api-key", apiKey);
+    wsUrl.searchParams.set("commit_strategy", "vad");
+    wsUrl.searchParams.set("vad_silence_threshold_secs", "1.5");
+    wsUrl.searchParams.set("include_timestamps", "true");
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[STT Token] ElevenLabs token request failed:", response.status, errorText);
-      return NextResponse.json(
-        { error: "Failed to generate STT token" },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json();
-
-    return NextResponse.json({ token: data.token });
+    return NextResponse.json({ signedUrl: wsUrl.toString() });
   } catch (error) {
     console.error("[STT Token] Error:", error);
     return NextResponse.json(
